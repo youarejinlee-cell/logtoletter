@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "무슨 생각",
+    "slug": "thought-letter",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "thoughtletter",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.example.thoughtletter"
+    },
+    "android": {
+      "package": "com.example.thoughtletter"
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "thought-checkins"
+        }
+      ]
+    ]
+  }
+}
