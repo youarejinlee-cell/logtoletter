@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>나에게</title>
+    <meta name="theme-color" content="#c56d5d" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./styles.css?v=79" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="앱 메뉴">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">💌</div>
+          <div>
+            <p class="eyebrow">미래의 나에게 보내는 지금의 나</p>
+            <h1>나에게</h1>
+          </div>
+        </div>
+
+        <nav class="nav" aria-label="주요 화면">
+          <button class="nav-button active" data-view="capture" type="button">
+            <span aria-hidden="true">📝</span>
+            기록
+          </button>
+          <button class="nav-button" data-view="calendar" type="button">
+            <span aria-hidden="true">📅</span>
+            캘린더
+          </button>
+          <button class="nav-button" data-view="letter" type="button">
+            <span aria-hidden="true">💌</span>
+            받은 편지함
+          </button>
+          <button class="nav-button" data-view="settings" type="button">
+            <span aria-hidden="true">🔔</span>
+            기록 알림 설정
+          </button>
+          <button class="nav-button" data-view="test" type="button">
+            <span aria-hidden="true">🧪</span>
+            테스트 콘솔
+          </button>
+        </nav>
+
+        <section class="schedule-card" aria-label="알림 상태">
+          <div>
+            <p class="muted">다음 물음</p>
+            <strong id="nextPrompt">알림 대기 중</strong>
+          </div>
+          <button class="icon-button" id="askNowButton" type="button" title="지금 묻기" aria-label="지금 묻기">?</button>
+        </section>
+      </aside>
+
+      <main class="main">
+        <section class="view active" id="captureView" aria-labelledby="captureTitle">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">나에게</p>
+              <h2 id="captureTitle">무슨 생각하고 있어?</h2>
+              <p class="lead">지금 남긴 생각들이 미래의 너에게 도착할 거야.</p>
+            </div>
+          </div>
+
+          <form class="capture-panel" id="entryForm">
+            <label class="field full">
+              <div class="field-top">
+                <span>생각</span>
+                <button class="voice-button" id="voiceInputButton" type="button" data-voice-target="#thoughtInput" data-voice-status="#voiceStatus" aria-pressed="false" aria-label="말로 남기기" title="말로 남기기">🎤</button>
+              </div>
+              <textarea id="thoughtInput" rows="7" placeholder="한 문장이어도 괜찮아." required></textarea>
+              <p class="voice-status" id="voiceStatus">마이크를 누르면 말한 걸 받아써줄게.</p>
+            </label>
+
+            <div class="prompt-row" aria-label="힌트">
+              <span class="prompt-label">힌트</span>
+              <button type="button" data-prompt="방금 깨달은 것은 ">방금 깨달은 것</button>
+              <button type="button" data-prompt="오늘 몸의 신호는 ">오늘 몸의 신호</button>
+              <button type="button" data-prompt="감사한 것은 ">감사한 것</button>
+              <button type="button" data-prompt="나 자신이 좋았던 순간은 ">나 자신이 좋았던 순간</button>
+              <button type="button" data-prompt="칭찬 받은 건 ">칭찬 받은 것</button>
+              <button type="button" data-prompt="부러웠던 건 ">부러운 것</button>
+              <button type="button" data-prompt="아까 속으로 욕하고 있었던 건 ">욕하고 있었음</button>
+              <button type="button" data-prompt="아까 쇼핑한 건 ">아까 쇼핑한 것</button>
+              <button type="button" data-prompt="오늘 ~에게 배운 게 있다면 ">배울 점</button>
+              <button type="button" data-prompt="나도 몰랐는데, 사실 나는 ">숨겨진 욕망 발견</button>
+            </div>
+
+            <input id="moodInput" type="hidden" value="" />
+            <div class="field mood-field">
+              <span>감정</span>
+              <div class="mood-picker" aria-label="감정 선택">
+                <div class="mood-group mood-positive">
+                  <div class="mood-group-header">
+                    <span class="mood-group-title">긍정 감정</span>
+                    <button class="mood-expand" type="button" data-expand-mood="positive" aria-expanded="false" aria-label="긍정 감정 더 보기">+</button>
+                  </div>
+                  <div class="mood-options" id="positiveMoodOptions"></div>
+                </div>
+                <div class="mood-group mood-negative">
+                  <div class="mood-group-header">
+                    <span class="mood-group-title">부정 감정</span>
+                    <button class="mood-expand" type="button" data-expand-mood="negative" aria-expanded="false" aria-label="부정 감정 더 보기">+</button>
+                  </div>
+                  <div class="mood-options" id="negativeMoodOptions"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="field-grid energy-grid">
+              <label class="field">
+                <span>에너지</span>
+                <input id="energyInput" type="hidden" value="" />
+                <div class="energy-meter" id="energyLevels" role="group" aria-label="에너지 레벨"></div>
+              </label>
+            </div>
+
+            <div class="action-row">
+              <button class="primary-button" id="entrySubmitButton" type="submit">남기기</button>
+            </div>
+            <p class="form-hint" id="entryFormHint">생각, 감정, 에너지를 모두 남기면 기록할 수 있어.</p>
+          </form>
+
+        </section>
+
+        <section class="view" id="calendarView" aria-labelledby="calendarTitle">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">CALENDAR</p>
+              <h2 id="calendarTitle">날짜별 기록</h2>
+              <p class="lead">그날의 나는 무슨 생각을 했을까?</p>
+            </div>
+            <div class="calendar-controls">
+              <div class="calendar-view-toggle" aria-label="캘린더 보기 방식">
+                <button class="active" type="button" data-calendar-view="date">날짜별</button>
+                <button type="button" data-calendar-view="recent">최근</button>
+              </div>
+              <div class="calendar-mode-field" id="calendarEnergyModeField">
+                <span>선택한 날의 에너지 표시</span>
+                <div class="calendar-energy-toggle" aria-label="선택한 날의 에너지 표시">
+                  <button class="active" type="button" data-calendar-energy-mode="first">첫</button>
+                  <button type="button" data-calendar-energy-mode="last">마지막</button>
+                  <button type="button" data-calendar-energy-mode="most">가장 많은</button>
+                </div>
+              </div>
+              <div class="calendar-range-field" id="calendarRangeField" hidden>
+                <span>기간</span>
+                <div class="calendar-range-toggle" aria-label="최근 기록 기간">
+                  <button class="active" type="button" data-calendar-range="7">1주</button>
+                  <button type="button" data-calendar-range="30">1개월</button>
+                  <button type="button" data-calendar-range="90">3개월</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <section class="calendar-panel" aria-label="기록 달력">
+            <div class="calendar-header">
+              <button class="icon-button" id="prevMonthButton" type="button" aria-label="이전 달">‹</button>
+              <strong id="calendarMonthLabel">이번 달</strong>
+              <button class="icon-button" id="nextMonthButton" type="button" aria-label="다음 달">›</button>
+            </div>
+            <div class="calendar-weekdays" aria-hidden="true">
+              <span>일</span>
+              <span>월</span>
+              <span>화</span>
+              <span>수</span>
+              <span>목</span>
+              <span>금</span>
+              <span>토</span>
+            </div>
+            <div class="calendar-grid" id="calendarGrid"></div>
+          </section>
+
+          <section class="timeline" aria-labelledby="calendarEntriesTitle">
+            <div class="section-heading">
+              <h3 id="calendarEntriesTitle">선택한 날의 기록</h3>
+              <div class="calendar-list-actions">
+                <div class="recent-sort-controls" id="recentSortControls" hidden>
+                  <label>
+                    <span>정렬</span>
+                    <select id="recentSortSelect" aria-label="최근 기록 정렬 기준">
+                      <option value="date">날짜순</option>
+                      <option value="energy">에너지순</option>
+                    </select>
+                  </label>
+                  <div class="sort-direction-toggle" aria-label="정렬 방향">
+                    <button class="active" type="button" data-recent-sort-direction="desc" aria-label="내림차순">↓</button>
+                    <button type="button" data-recent-sort-direction="asc" aria-label="오름차순">↑</button>
+                  </div>
+                </div>
+                <button class="text-button" id="clearEntriesButton" type="button">전부 비우기</button>
+              </div>
+            </div>
+            <section class="summary-strip calendar-summary" id="calendarSummaryStrip" aria-label="기록 요약"></section>
+            <div id="calendarEntriesList" class="entries-list"></div>
+          </section>
+        </section>
+
+        <section class="view" id="letterView" aria-labelledby="letterTitle">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">WEEKLY</p>
+              <h2 id="letterTitle">지난 주의 편지</h2>
+              <p class="lead">지난 날의 네가 보낸 편지를 확인해봐.</p>
+            </div>
+            <button class="secondary-button" id="shareLetterButton" type="button">공유하기</button>
+          </div>
+
+          <section class="letter-period-nav" aria-label="편지 기간 이동">
+            <button class="icon-button" id="prevLetterButton" type="button" aria-label="지난 주 편지">‹</button>
+            <div>
+              <span>지난 주</span>
+              <strong id="letterPeriodLabel">기간 준비 중</strong>
+              <small id="letterSendDateLabel">편지 받은 날 준비 중</small>
+              <small id="letterNextStatus">다음 편지 준비 중</small>
+            </div>
+            <button class="icon-button" id="nextLetterButton" type="button" aria-label="다음 주 편지">›</button>
+          </section>
+
+          <article class="letter-paper" id="letterPaper">
+            <p class="muted">아직 전해줄 편지가 없어.</p>
+          </article>
+
+          <section class="insights-grid" aria-label="주간 분석">
+            <div class="insight-block">
+              <h3>생각 속 반복된 키워드</h3>
+              <ul id="themeList"></ul>
+            </div>
+            <div class="insight-block">
+              <h3>다음 주에 해볼 것</h3>
+              <ul id="recommendationList"></ul>
+            </div>
+          </section>
+
+          <form class="letter-postscript" id="letterPostscriptForm">
+            <label class="field full">
+              <span>추신</span>
+              <textarea id="letterPostscriptInput" rows="4" placeholder="이 편지를 읽고 지금의 내가 남기고 싶은 말을 적어봐."></textarea>
+            </label>
+            <div class="action-row">
+              <button class="primary-button" id="letterPostscriptSaveButton" type="submit">저장하기</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="view" id="settingsView" aria-labelledby="settingsTitle">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">NOTIFICATION</p>
+              <h2 id="settingsTitle">기록 알림 설정</h2>
+              <p class="lead">순간의 생각을 기록할 수 있도록 앱 푸시를 보내줄게.</p>
+            </div>
+            <span class="status-pill" id="permissionStatus">권한 보기 전</span>
+          </div>
+
+          <form class="settings-panel" id="settingsForm">
+            <div class="settings-toggle-row">
+              <span id="notificationStatusLabel">알림 꺼짐</span>
+              <label class="notification-toggle" title="알림 켜기" aria-label="알림 켜기">
+                <span class="notification-bell" id="notificationIcon" aria-hidden="true">🔕</span>
+                <input id="notificationToggle" type="checkbox" />
+                <span class="notification-switch" aria-hidden="true">
+                  <span class="notification-knob"></span>
+                </span>
+              </label>
+            </div>
+
+            <div class="schedule-options" id="scheduleOptions">
+              <div class="field-grid three">
+                <label class="field">
+                  <span>시작</span>
+                  <input id="startTimeInput" type="time" required />
+                </label>
+                <label class="field">
+                  <span>방해금지 시작</span>
+                  <input id="dndStartInput" type="time" required />
+                </label>
+                <label class="field">
+                  <span>방해금지 종료</span>
+                  <input id="dndEndInput" type="time" required />
+                </label>
+              </div>
+
+              <label class="field">
+                <span>알림 간격</span>
+                <div class="stepper">
+                  <button type="button" data-step="-15" aria-label="알림 간격 줄이기">−</button>
+                  <input id="intervalInput" type="number" min="15" max="360" step="15" required />
+                  <button type="button" data-step="15" aria-label="알림 간격 늘리기">+</button>
+                  <span>분</span>
+                </div>
+              </label>
+            </div>
+
+            <div class="action-row">
+              <button class="secondary-button" id="exportButton" type="button">내보내기</button>
+              <button class="primary-button" type="submit">저장</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="view" id="testView" aria-labelledby="testTitle">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">DEVELOPMENT</p>
+              <h2 id="testTitle">테스트 콘솔</h2>
+              <p class="lead">운영 배포 때는 이 화면만 떼어내면 돼.</p>
+            </div>
+            <button class="text-button" id="refreshTestConsoleButton" type="button">새로고침</button>
+          </div>
+
+          <section class="test-console" aria-label="알림 테스트 콘솔">
+            <div class="test-grid">
+              <div>
+                <span>알림 권한</span>
+                <strong id="testPermissionState">확인 전</strong>
+              </div>
+              <div>
+                <span>마이크 권한</span>
+                <strong id="testMicrophoneState">확인 전</strong>
+              </div>
+              <div>
+                <span>앱 알림</span>
+                <strong id="testAppState">꺼짐</strong>
+              </div>
+              <div>
+                <span>다음 알림</span>
+                <strong id="testNextPrompt">없음</strong>
+              </div>
+            </div>
+
+            <div class="test-actions">
+              <button class="secondary-button" id="requestPermissionButton" type="button">권한 물어보기</button>
+              <button class="secondary-button" id="sendTestNotificationButton" type="button">즉시 알림</button>
+              <button class="secondary-button" id="scheduleTestNotificationButton" type="button">10초 뒤 알림</button>
+              <button class="secondary-button" id="openPromptTestButton" type="button">앱 팝업</button>
+            </div>
+
+            <div class="permission-simulator" aria-label="권한 가정 테스트">
+              <div>
+                <span>알림 권한 가정</span>
+                <div class="segmented-control">
+                  <button type="button" data-test-permission="notification" data-test-value="actual">실제</button>
+                  <button type="button" data-test-permission="notification" data-test-value="granted">허용</button>
+                  <button type="button" data-test-permission="notification" data-test-value="denied">차단</button>
+                </div>
+              </div>
+              <div>
+                <span>마이크 권한 가정</span>
+                <div class="segmented-control">
+                  <button type="button" data-test-permission="microphone" data-test-value="actual">실제</button>
+                  <button type="button" data-test-permission="microphone" data-test-value="granted">허용</button>
+                  <button type="button" data-test-permission="microphone" data-test-value="denied">차단</button>
+                </div>
+              </div>
+            </div>
+
+            <p class="test-log" id="notificationTestLog">테스트 결과는 여기에 남겨둘게.</p>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="promptDialog">
+      <form method="dialog" class="dialog-card">
+        <button class="icon-button close-button" value="cancel" aria-label="닫기">×</button>
+        <p class="eyebrow">CHECK-IN</p>
+        <h2>무슨 생각하고 있어?</h2>
+        <div class="dialog-voice-row">
+          <span>생각</span>
+          <button class="voice-button" id="dialogVoiceButton" type="button" data-voice-target="#dialogThoughtInput" data-voice-status="#dialogVoiceStatus" aria-pressed="false" aria-label="말로 남기기" title="말로 남기기">🎤</button>
+        </div>
+        <textarea id="dialogThoughtInput" rows="5" placeholder="바로 떠오르는 말을 남겨줘."></textarea>
+        <p class="voice-status" id="dialogVoiceStatus">마이크를 누르면 말한 걸 받아써줄게.</p>
+        <div class="action-row">
+          <button class="secondary-button" value="cancel">나중에</button>
+          <button class="primary-button" id="dialogSaveButton" value="default">남기기</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="shareDialog">
+      <form method="dialog" class="dialog-card share-dialog-card">
+        <button class="icon-button close-button" value="cancel" aria-label="닫기">×</button>
+        <p class="eyebrow">SHARE</p>
+        <h2>편지 공유하기</h2>
+        <div class="share-options">
+          <button class="secondary-button" id="copyThreadsButton" type="button">스레드 텍스트 복사</button>
+          <button class="secondary-button" id="copyInstagramButton" type="button">인스타 캡션 복사</button>
+          <button class="secondary-button" id="downloadFeedImageButton" type="button">피드 이미지</button>
+          <button class="secondary-button" id="downloadStoryImageButton" type="button">스토리 이미지</button>
+        </div>
+        <p class="test-log">스레드는 500자 안쪽, 인스타 이미지는 피드 1080×1350, 스토리 1080×1920으로 맞춰줄게.</p>
+      </form>
+    </dialog>
+
+    <div class="toast" id="appToast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+    <script src="./app.js?v=79"></script>
+  </body>
+</html>
