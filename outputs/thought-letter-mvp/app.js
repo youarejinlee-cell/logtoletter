@@ -2,6 +2,7 @@ const STORAGE_KEY = "thought-letter-mvp-v1";
 const LETTER_VERSION = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const weekdayLabels = ["일", "월", "화", "수", "목", "금", "토"];
+const SUPABASE_CONFIG = window.LOG_TO_LETTER_SUPABASE || {};
 
 const moods = [
   { key: "calm", label: "😌 차분함", category: "positive" },
@@ -80,6 +81,12 @@ let speechListeningStatus = null;
 let speechBaseText = "";
 let speechFinalText = "";
 let toastTimer = null;
+let supabaseClient = null;
+let authSession = null;
+let authUser = null;
+let cloudReady = false;
+let cloudSyncTimer = null;
+let isHydratingCloud = false;
 const expandedMoods = {
   positive: false,
   negative: false,
@@ -107,6 +114,387 @@ function loadState() {
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  queueCloudSync();
+}
+
+function isSupabaseConfigured() {
+  return Boolean(SUPABASE_CONFIG.url && SUPABASE_CONFIG.anonKey);
+}
+
+function initSupabaseClient() {
+  if (!isSupabaseConfigured() || !window.supabase?.createClient) return null;
+  if (!supabaseClient) {
+    supabaseClient = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+  }
+  return supabaseClient;
+}
+
+function setAuthSession(session) {
+  authSession = session || null;
+  authUser = authSession?.user || null;
+  cloudReady = Boolean(supabaseClient && authUser);
+}
+
+function getMoodCategory(mood) {
+  return moods.find((item) => item.key === mood)?.category || null;
+}
+
+function getProfileRow() {
+  if (!authUser) return null;
+  return {
+    user_id: authUser.id,
+    email: authUser.email || null,
+    display_name: authUser.user_metadata?.full_name || authUser.user_metadata?.name || null,
+    first_used_at: state.letterSettings.firstUsedAt || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function getNotificationSettingsRow() {
+  if (!authUser) return null;
+  return {
+    user_id: authUser.id,
+    enabled: Boolean(state.settings.enabled),
+    notifications_enabled: Boolean(state.settings.notificationsEnabled),
+    start_time: state.settings.startTime,
+    interval_minutes: Number(state.settings.intervalMinutes),
+    dnd_start: state.settings.dndStart,
+    dnd_end: state.settings.dndEnd,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Seoul",
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function getAppSettingsRow() {
+  if (!authUser) return null;
+  return {
+    user_id: authUser.id,
+    letter_settings: state.letterSettings,
+    test_overrides: state.testOverrides,
+    preferences: {},
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function entryToRow(entry) {
+  return {
+    id: entry.id,
+    user_id: authUser.id,
+    text: entry.text,
+    mood: entry.mood,
+    mood_category: getMoodCategory(entry.mood),
+    energy: Number(entry.energy),
+    source: entry.source || "web",
+    created_at: entry.createdAt,
+    demo_tag: entry.demoTag || null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function rowToEntry(row) {
+  return {
+    id: row.id,
+    text: row.text,
+    mood: row.mood,
+    energy: Number(row.energy),
+    createdAt: row.created_at,
+    ...(row.source ? { source: row.source } : {}),
+    ...(row.demo_tag ? { demoTag: row.demo_tag } : {}),
+  };
+}
+
+function letterToRow(letter) {
+  const temp = document.createElement("div");
+  temp.innerHTML = letter.html || "";
+  return {
+    user_id: authUser.id,
+    id: letter.id,
+    title: letter.title || "지난 주의 편지",
+    body: temp.textContent.trim() || letter.title || "지난 주의 편지",
+    html: letter.html || "",
+    period_start: getDateKey(letter.periodStart || letter.createdAt || new Date()),
+    period_end: getDateKey(letter.periodEnd || letter.deliveredAt || letter.createdAt || new Date()),
+    delivered_at: getDateKey(letter.deliveredAt || letter.createdAt || new Date()),
+    summary_json: { periodLabel: letter.periodLabel || "", entryCount: letter.entryCount || null },
+    themes: letter.themes || [],
+    recommendations: letter.recommendations || [],
+    postscript: letter.postscript || "",
+    model: null,
+    prompt_version: `rules-v${LETTER_VERSION}`,
+    version: letter.version || LETTER_VERSION,
+    created_at: letter.createdAt || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function rowToLetter(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    html: row.html,
+    periodLabel: row.summary_json?.periodLabel || `${row.period_start} ~ ${row.period_end}`,
+    periodStart: row.period_start,
+    periodEnd: row.period_end,
+    deliveredAt: row.delivered_at,
+    themes: row.themes || [],
+    recommendations: row.recommendations || [],
+    postscript: row.postscript || "",
+    version: row.version,
+    createdAt: row.created_at,
+  };
+}
+
+function saveLocalOnly(nextState = state) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+}
+
+function queueCloudSync() {
+  if (!cloudReady || isHydratingCloud) return;
+  window.clearTimeout(cloudSyncTimer);
+  cloudSyncTimer = window.setTimeout(() => {
+    persistCloudSnapshot().catch((error) => {
+      console.warn("Supabase sync failed", error);
+      renderAuth();
+    });
+  }, 600);
+}
+
+async function persistCloudSnapshot() {
+  if (!cloudReady || !authUser) return;
+  const profile = getProfileRow();
+  const notificationSettings = getNotificationSettingsRow();
+  const appSettings = getAppSettingsRow();
+  const setupResults = await Promise.all([
+    supabaseClient.from("profiles").upsert(profile, { onConflict: "user_id" }),
+    supabaseClient.from("notification_settings").upsert(notificationSettings, { onConflict: "user_id" }),
+    supabaseClient.from("app_settings").upsert(appSettings, { onConflict: "user_id" }),
+  ]);
+  const setupError = setupResults.find((result) => result.error)?.error;
+  if (setupError) throw setupError;
+
+  if (state.entries.length) {
+    const { error } = await supabaseClient.from("entries").upsert(state.entries.map(entryToRow), { onConflict: "id" });
+    if (error) throw error;
+  }
+
+  if (state.letters.length) {
+    await persistLetterPeriods(state.letters);
+    const { error } = await supabaseClient.from("letters").upsert(state.letters.map(letterToRow), { onConflict: "user_id,id" });
+    if (error) throw error;
+  }
+}
+
+async function persistLetterPeriods(letters) {
+  if (!letters.length) return;
+  const rows = letters.map((letter) => ({
+    user_id: authUser.id,
+    input_start_date: getDateKey(letter.periodStart || letter.createdAt || new Date()),
+    input_end_date: getDateKey(letter.periodEnd || letter.deliveredAt || letter.createdAt || new Date()),
+    send_date: getDateKey(letter.deliveredAt || letter.createdAt || new Date()),
+    status: "delivered",
+  }));
+  const { error } = await supabaseClient.from("letter_periods").upsert(rows, { onConflict: "user_id,send_date" });
+  if (error) throw error;
+}
+
+async function deleteCloudEntry(id) {
+  if (!cloudReady) return;
+  const { error } = await supabaseClient.from("entries").delete().eq("id", id);
+  if (error) console.warn("Supabase delete entry failed", error);
+}
+
+async function clearCloudJournalData() {
+  if (!cloudReady || !authUser) return;
+  const [entryResult, letterResult, periodResult] = await Promise.all([
+    supabaseClient.from("entries").delete().eq("user_id", authUser.id),
+    supabaseClient.from("letters").delete().eq("user_id", authUser.id),
+    supabaseClient.from("letter_periods").delete().eq("user_id", authUser.id),
+  ]);
+  if (entryResult.error) console.warn("Supabase clear entries failed", entryResult.error);
+  if (letterResult.error) console.warn("Supabase clear letters failed", letterResult.error);
+  if (periodResult.error) console.warn("Supabase clear letter periods failed", periodResult.error);
+}
+
+async function loadCloudState() {
+  if (!cloudReady || !authUser) return;
+  isHydratingCloud = true;
+  try {
+    const [
+      { data: profile, error: profileError },
+      { data: notificationSettings, error: notificationError },
+      { data: appSettings, error: settingsError },
+      { data: remoteEntries, error: entriesError },
+      { data: remoteLetters, error: lettersError },
+    ] =
+      await Promise.all([
+        supabaseClient.from("profiles").select("*").eq("user_id", authUser.id).maybeSingle(),
+        supabaseClient.from("notification_settings").select("*").eq("user_id", authUser.id).maybeSingle(),
+        supabaseClient.from("app_settings").select("*").eq("user_id", authUser.id).maybeSingle(),
+        supabaseClient.from("entries").select("*").eq("user_id", authUser.id).order("created_at", { ascending: false }),
+        supabaseClient.from("letters").select("*").eq("user_id", authUser.id).order("delivered_at", { ascending: false }),
+      ]);
+
+    if (profileError) throw profileError;
+    if (notificationError) throw notificationError;
+    if (settingsError) throw settingsError;
+    if (entriesError) throw entriesError;
+    if (lettersError) throw lettersError;
+
+    const hasRemoteJournal = Boolean(remoteEntries?.length || remoteLetters?.length);
+    const hasLocalJournal = Boolean(state.entries.length || state.letters.length);
+    if (!hasRemoteJournal && hasLocalJournal) {
+      await persistCloudSnapshot();
+      showToast("이 기기의 기록을 계정에 연결했어");
+      return;
+    }
+
+    state = hydrateLetterState({
+      ...structuredClone(defaultState),
+      settings: {
+        ...defaultState.settings,
+        ...state.settings,
+        ...(notificationSettings
+          ? {
+              startTime: notificationSettings.start_time,
+              dndStart: notificationSettings.dnd_start,
+              dndEnd: notificationSettings.dnd_end,
+              intervalMinutes: notificationSettings.interval_minutes,
+              enabled: notificationSettings.enabled,
+              notificationsEnabled: notificationSettings.notifications_enabled,
+            }
+          : {}),
+      },
+      testOverrides: { ...defaultState.testOverrides, ...(appSettings?.test_overrides || state.testOverrides || {}) },
+      letterSettings: {
+        ...defaultState.letterSettings,
+        ...(appSettings?.letter_settings || state.letterSettings || {}),
+        ...(profile?.first_used_at ? { firstUsedAt: profile.first_used_at } : {}),
+      },
+      entries: (remoteEntries || []).map(rowToEntry),
+      letters: (remoteLetters || []).map(rowToLetter),
+    });
+    state.letter = state.letters[0] || null;
+    saveLocalOnly();
+    selectedDateKey = getDateKey(new Date());
+  } finally {
+    isHydratingCloud = false;
+  }
+}
+
+function renderAuth() {
+  const card = $("#authCard");
+  if (!card) return;
+  const title = $("#authStatusTitle");
+  const text = $("#authStatusText");
+  const form = $("#authForm");
+  const signOutButton = $("#signOutButton");
+  const submitButton = $("#authSubmitButton");
+  const googleButton = $("#googleLoginButton");
+  const setAuthButtonsDisabled = (disabled) => {
+    submitButton.disabled = disabled;
+    googleButton.disabled = disabled;
+  };
+
+  if (!isSupabaseConfigured()) {
+    title.textContent = "Supabase 연결 전";
+    text.textContent = "supabase-config.js에 URL과 anon key를 넣어줘.";
+    form.hidden = false;
+    setAuthButtonsDisabled(true);
+    signOutButton.hidden = true;
+    return;
+  }
+
+  if (!window.supabase?.createClient) {
+    title.textContent = "로그인 준비 중";
+    text.textContent = "Supabase 라이브러리를 불러오는 중이야.";
+    form.hidden = false;
+    setAuthButtonsDisabled(true);
+    signOutButton.hidden = true;
+    return;
+  }
+
+  setAuthButtonsDisabled(false);
+  if (authUser) {
+    title.textContent = "로그인됨";
+    text.textContent = authUser.email || "계정이 연결됐어.";
+    form.hidden = true;
+    signOutButton.hidden = false;
+  } else {
+    title.textContent = "계정 연결";
+    text.textContent = "이메일로 로그인 링크를 받을 수 있어.";
+    form.hidden = false;
+    signOutButton.hidden = true;
+  }
+}
+
+async function initAuth() {
+  initSupabaseClient();
+  renderAuth();
+  if (!supabaseClient) return;
+
+  const { data, error } = await supabaseClient.auth.getSession();
+  if (error) {
+    console.warn("Supabase session failed", error);
+    renderAuth();
+    return;
+  }
+  setAuthSession(data.session);
+  if (authUser) {
+    await loadCloudState();
+    render();
+  }
+  renderAuth();
+
+  supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+    setAuthSession(session);
+    if (authUser) {
+      await loadCloudState();
+      showToast("계정이 연결됐어");
+    }
+    render();
+    renderAuth();
+  });
+}
+
+async function sendLoginLink(email) {
+  if (!supabaseClient || !email) return;
+  const redirectTo = `${window.location.origin}${window.location.pathname}`;
+  const { error } = await supabaseClient.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: redirectTo },
+  });
+  if (error) {
+    showToast("로그인 링크 전송 실패");
+    console.warn("Supabase login failed", error);
+    return;
+  }
+  showToast("로그인 링크를 보냈어");
+}
+
+async function signInWithGoogle() {
+  if (!supabaseClient) return;
+  const redirectTo = `${window.location.origin}${window.location.pathname}`;
+  const { error } = await supabaseClient.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo },
+  });
+  if (error) {
+    showToast("Google 로그인 실패");
+    console.warn("Supabase OAuth failed", error);
+  }
+}
+
+async function signOut() {
+  if (!supabaseClient) return;
+  const { error } = await supabaseClient.auth.signOut();
+  if (error) {
+    showToast("로그아웃 실패");
+    console.warn("Supabase sign out failed", error);
+    return;
+  }
+  setAuthSession(null);
+  renderAuth();
+  showToast("로그아웃했어");
 }
 
 function hydrateLetterState(nextState) {
@@ -955,7 +1343,7 @@ function getPlainLetterText(letter) {
   temp.innerHTML = letter.html;
   const body = temp.textContent.replace(/\s+/g, " ").trim();
   const postscript = letter.postscript ? `\n\n추신\n${letter.postscript}` : "";
-  return `나에게 - ${letter.title || "지난 주의 편지"}\n${letter.periodLabel || ""}\n\n${body}${postscript}`;
+  return `Log to Letter - ${letter.title || "지난 주의 편지"}\n${letter.periodLabel || ""}\n\n${body}${postscript}`;
 }
 
 function getLetterParagraphs(letter) {
@@ -974,10 +1362,10 @@ function truncateText(text, maxLength) {
 function getShareCaption(letter, maxLength) {
   const paragraphs = getLetterParagraphs(letter);
   const text = [
-    `나에게, ${letter.periodLabel || "지난 주의 편지"}`,
+    `Log to Letter, ${letter.periodLabel || "지난 주의 편지"}`,
     letter.title || "지난 주의 편지",
     paragraphs[0] || "",
-    "#나에게 #생각기록 #주간편지",
+    "#LogToLetter #생각기록 #주간편지",
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -1017,26 +1405,26 @@ function drawShareImage(letter, width, height) {
   canvas.height = height;
   const context = canvas.getContext("2d");
   const padding = Math.round(width * 0.08);
-  context.fillStyle = "#f7f6f4";
+  context.fillStyle = "#f5f8f1";
   context.fillRect(0, 0, width, height);
-  context.fillStyle = "#fff4ef";
+  context.fillStyle = "#e7f6df";
   context.fillRect(0, 0, width, Math.round(height * 0.16));
-  context.fillStyle = "#c56d5d";
+  context.fillStyle = "#2f8f54";
   context.font = `800 ${Math.round(width * 0.034)}px system-ui, sans-serif`;
-  context.fillText("나에게", padding, padding);
+  context.fillText("Log to Letter", padding, padding);
   context.font = `700 ${Math.round(width * 0.028)}px system-ui, sans-serif`;
   context.fillText(letter.periodLabel || "지난 주의 편지", padding, padding + Math.round(width * 0.052));
-  context.fillStyle = "#242220";
+  context.fillStyle = "#18241b";
   context.font = `900 ${Math.round(width * 0.06)}px system-ui, sans-serif`;
   let y = Math.round(height * 0.23);
   y = wrapCanvasText(context, letter.title || "지난 주의 편지", padding, y, width - padding * 2, Math.round(width * 0.078), 4);
-  context.fillStyle = "#74706b";
+  context.fillStyle = "#657064";
   context.font = `500 ${Math.round(width * 0.034)}px system-ui, sans-serif`;
   const paragraphs = getLetterParagraphs(letter);
   const body = paragraphs.slice(0, 3).join(" ");
   y += Math.round(width * 0.06);
   wrapCanvasText(context, body, padding, y, width - padding * 2, Math.round(width * 0.054), height > 1500 ? 12 : 8);
-  context.fillStyle = "#c56d5d";
+  context.fillStyle = "#2f8f54";
   context.font = `800 ${Math.round(width * 0.028)}px system-ui, sans-serif`;
   context.fillText("지난 날의 네가 보낸 편지", padding, height - padding);
   return canvas;
@@ -1048,7 +1436,7 @@ function downloadShareImage(kind) {
   const size = kind === "story" ? { width: 1080, height: 1920 } : { width: 1080, height: 1350 };
   const canvas = drawShareImage(letter, size.width, size.height);
   const link = document.createElement("a");
-  link.download = `naege-${kind}-${getDateKey(letter.deliveredAt || new Date())}.png`;
+  link.download = `log-to-letter-${kind}-${getDateKey(letter.deliveredAt || new Date())}.png`;
   link.href = canvas.toDataURL("image/png");
   link.click();
   showToast(kind === "story" ? "스토리 이미지를 내려받았어" : "피드 이미지를 내려받았어");
@@ -1126,6 +1514,7 @@ function render() {
   renderCalendar();
   renderLetter();
   renderSettings();
+  renderAuth();
   updateNextPrompt();
   updateEntrySubmitState();
 }
@@ -1410,6 +1799,7 @@ document.addEventListener("click", (event) => {
     state.entries = state.entries.filter((entry) => entry.id !== deleteButton.dataset.delete);
     state.letter = null;
     saveState();
+    deleteCloudEntry(deleteButton.dataset.delete);
     render();
   }
 
@@ -1569,6 +1959,15 @@ $("#settingsForm").addEventListener("submit", (event) => {
   render();
 });
 
+$("#authForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const email = $("#authEmailInput").value.trim();
+  await sendLoginLink(email);
+});
+
+$("#googleLoginButton").addEventListener("click", signInWithGoogle);
+$("#signOutButton").addEventListener("click", signOut);
+
 document.querySelectorAll("[data-step]").forEach((button) => {
   button.addEventListener("click", () => {
     const input = $("#intervalInput");
@@ -1621,7 +2020,7 @@ $("#requestPermissionButton").addEventListener("click", async () => {
 });
 
 $("#sendTestNotificationButton").addEventListener("click", () => {
-  if (sendBrowserNotification("나에게 테스트", "알림이 정상적으로 도착하면 설정이 잘 된 거야.")) {
+  if (sendBrowserNotification("Log to Letter 테스트", "알림이 정상적으로 도착하면 설정이 잘 된 거야.")) {
     writeTestLog("즉시 테스트 알림을 보냈어.");
   }
   renderTestConsole();
@@ -1630,7 +2029,7 @@ $("#sendTestNotificationButton").addEventListener("click", () => {
 $("#scheduleTestNotificationButton").addEventListener("click", () => {
   writeTestLog("10초 뒤 테스트 알림을 예약했어. 이 창을 열어둔 상태에서 확인해봐.");
   window.setTimeout(() => {
-    sendBrowserNotification("나에게 10초 테스트", "10초 뒤 알림이 도착했어.");
+    sendBrowserNotification("Log to Letter 10초 테스트", "10초 뒤 알림이 도착했어.");
     renderTestConsole();
   }, 10000);
 });
@@ -1647,7 +2046,7 @@ $("#exportButton").addEventListener("click", () => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `naege-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `log-to-letter-${new Date().toISOString().slice(0, 10)}.json`;
   link.click();
   URL.revokeObjectURL(url);
 });
@@ -1655,6 +2054,7 @@ $("#clearEntriesButton").addEventListener("click", () => {
   state.entries = [];
   state.letter = null;
   saveState();
+  clearCloudJournalData();
   render();
 });
 
@@ -1670,14 +2070,19 @@ $("#dialogSaveButton").addEventListener("click", (event) => {
 });
 
 const startupParams = new URLSearchParams(window.location.search);
-if (startupParams.get("seed") === "love-prev") {
-  seedLovePreviousWeekData();
-  window.history.replaceState(null, "", `${window.location.pathname}?v=79`);
-} else {
-  render();
-}
-startPromptLoop();
+async function boot() {
+  if (startupParams.get("seed") === "love-prev") {
+    seedLovePreviousWeekData();
+    window.history.replaceState(null, "", `${window.location.pathname}?v=95`);
+  } else {
+    render();
+  }
+  await initAuth();
+  startPromptLoop();
 
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("./sw.js").catch(() => {});
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  }
 }
+
+boot();

@@ -1,0 +1,6 @@
+.DS_Store
+
+# Local credentials
+outputs/thought-letter-mvp/client_secret_*.json
+outputs/thought-letter-mvp/*secret*.json
+outputs/thought-letter-mvp/supabase-config.local.js

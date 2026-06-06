@@ -1,11 +1,12 @@
-const CACHE_NAME = "dear-me-mvp-v79";
+const CACHE_NAME = "log-to-letter-mvp-v95";
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
+  "./supabase-config.js",
   "./manifest.webmanifest",
-  "./icon.svg",
+  "./icon.png",
 ];
 
 self.addEventListener("install", (event) => {

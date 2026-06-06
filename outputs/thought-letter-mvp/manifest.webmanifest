@@ -1,17 +1,17 @@
 {
-  "name": "나에게",
-  "short_name": "나에게",
+  "name": "Log to Letter",
+  "short_name": "Log to Letter",
   "description": "미래의 나에게 보내는 지금의 나",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f7f6f4",
-  "theme_color": "#c56d5d",
+  "background_color": "#f5f8f1",
+  "theme_color": "#2f8f54",
   "icons": [
     {
-      "src": "./icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "./icon.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]

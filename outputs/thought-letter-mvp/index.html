@@ -3,21 +3,42 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>나에게</title>
-    <meta name="theme-color" content="#c56d5d" />
+    <title>Log to Letter</title>
+    <meta name="theme-color" content="#2f8f54" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=79" />
+    <link rel="icon" href="./icon.png?v=95" type="image/png" />
+    <link rel="stylesheet" href="./styles.css?v=95" />
   </head>
   <body>
     <div class="app-shell">
       <aside class="sidebar" aria-label="앱 메뉴">
         <div class="brand">
-          <div class="brand-mark" aria-hidden="true">💌</div>
+          <div class="brand-mark" aria-hidden="true">
+            <img src="./icon.png?v=95" alt="" />
+          </div>
           <div>
             <p class="eyebrow">미래의 나에게 보내는 지금의 나</p>
-            <h1>나에게</h1>
+            <h1>Log to Letter</h1>
           </div>
         </div>
+
+        <section class="auth-card" id="authCard" aria-label="계정">
+          <div class="auth-copy">
+            <p class="muted">계정</p>
+            <strong id="authStatusTitle">로컬 모드</strong>
+            <span id="authStatusText">이 기기에만 저장 중이야.</span>
+          </div>
+          <form class="auth-form" id="authForm">
+            <label>
+              <span>이메일</span>
+              <input id="authEmailInput" type="email" autocomplete="email" placeholder="you@example.com" />
+            </label>
+            <button class="secondary-button" id="authSubmitButton" type="submit">로그인 링크 받기</button>
+            <div class="auth-divider"><span>또는</span></div>
+            <button class="secondary-button social-button" id="googleLoginButton" type="button">Google로 계속하기</button>
+          </form>
+          <button class="text-button" id="signOutButton" type="button" hidden>로그아웃</button>
+        </section>
 
         <nav class="nav" aria-label="주요 화면">
           <button class="nav-button active" data-view="capture" type="button">
@@ -29,7 +50,7 @@
             캘린더
           </button>
           <button class="nav-button" data-view="letter" type="button">
-            <span aria-hidden="true">💌</span>
+            <img class="nav-app-icon" src="./icon.png?v=95" alt="" aria-hidden="true" />
             받은 편지함
           </button>
           <button class="nav-button" data-view="settings" type="button">
@@ -55,7 +76,7 @@
         <section class="view active" id="captureView" aria-labelledby="captureTitle">
           <div class="page-heading">
             <div>
-              <p class="eyebrow">나에게</p>
+              <p class="eyebrow">Log to Letter</p>
               <h2 id="captureTitle">무슨 생각하고 있어?</h2>
               <p class="lead">지금 남긴 생각들이 미래의 너에게 도착할 거야.</p>
             </div>
@@ -83,6 +104,7 @@
               <button type="button" data-prompt="아까 쇼핑한 건 ">아까 쇼핑한 것</button>
               <button type="button" data-prompt="오늘 ~에게 배운 게 있다면 ">배울 점</button>
               <button type="button" data-prompt="나도 몰랐는데, 사실 나는 ">숨겨진 욕망 발견</button>
+              <button type="button" data-prompt="아까 먹은 ">먹은 것</button>
             </div>
 
             <input id="moodInput" type="hidden" value="" />
@@ -396,6 +418,9 @@
 
     <div class="toast" id="appToast" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <script src="./app.js?v=79"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./supabase-config.js?v=95"></script>
+    <script src="./supabase-config.local.js?v=95"></script>
+    <script src="./app.js?v=95"></script>
   </body>
 </html>
