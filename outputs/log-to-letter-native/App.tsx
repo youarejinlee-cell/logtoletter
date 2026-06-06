@@ -10,7 +10,11 @@ import { CaptureScreen } from "./src/screens/CaptureScreen";
 import { DevConsoleScreen } from "./src/screens/DevConsoleScreen";
 import { InboxScreen } from "./src/screens/InboxScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
+import { isDevelopmentVariant } from "./src/lib/appVariant";
+import { createId, isUuid } from "./src/lib/ids";
 import { buildWeeklyLetter } from "./src/lib/letter";
+import { cancelLogNotifications, getNotificationPermissionStatus, scheduleLogNotifications } from "./src/lib/notifications";
+import { deleteRemoteEntries, normalizeStateIds, syncAppState, upsertEntry, upsertRemoteSettings } from "./src/lib/remoteSync";
 import { defaultState, loadAppState, saveAppState } from "./src/lib/storage";
 import { getCurrentSession, signInWithGoogle, signOut, supabase } from "./src/lib/supabase";
 import { AppThemeProvider, themePalettes } from "./src/lib/theme";
@@ -41,6 +45,20 @@ function nowForState(state: AppState) {
 
 function entryAt(entry: Entry) {
   return startOfDay(entry.createdAt).getTime();
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object") {
+    const details = error as { message?: string; code?: string; details?: string; hint?: string };
+    return [
+      details.message,
+      details.code ? `code: ${details.code}` : null,
+      details.details,
+      details.hint ? `hint: ${details.hint}` : null
+    ].filter(Boolean).join(" · ") || JSON.stringify(error);
+  }
+  return String(error || "서버 동기화에 실패했어.");
 }
 
 function reconcileLetters(state: AppState, today = currentAppDate(state)): AppState {
@@ -83,13 +101,20 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const [notificationStatus, setNotificationStatus] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [calendarFocusDate, setCalendarFocusDate] = useState<string | undefined>();
+  const [hydrated, setHydrated] = useState(false);
   const letters = state.letters;
   const theme = themePalettes[state.theme];
+  const activeTab = !isDevelopmentVariant && tab === "dev" ? "capture" : tab;
 
   useEffect(() => {
-    loadAppState().then((loaded) => setState(reconcileLetters(loaded)));
+    loadAppState().then((loaded) => {
+      setState(reconcileLetters(normalizeStateIds(loaded)));
+      setHydrated(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -110,12 +135,44 @@ export default function App() {
     saveAppState(state);
   }, [state]);
 
+  const runFullSync = async (targetUser = user, targetState = state) => {
+    if (!targetUser) return;
+    setSyncStatus("동기화 중");
+    setAuthError(null);
+    try {
+      const synced = await syncAppState(targetUser, targetState);
+      setState(reconcileLetters(synced));
+      setSyncStatus("완료");
+    } catch (error) {
+      console.warn("Supabase sync failed", error);
+      setSyncStatus("실패");
+      setAuthError(getErrorMessage(error));
+    }
+  };
+
+  useEffect(() => {
+    if (!hydrated || !user) return;
+    runFullSync(user, state);
+  }, [hydrated, user?.id]);
+
   const addEntry = (entry: Entry) => {
+    const normalized = { ...entry, id: isUuid(entry.id) ? entry.id : createId() };
     setCalendarFocusDate(dateKey(entry.createdAt));
     setState((current) => reconcileLetters({
       ...current,
-      entries: [entry, ...current.entries]
+      entries: [normalized, ...current.entries]
     }));
+    if (user) {
+      setSyncStatus("기록 저장 중");
+      setAuthError(null);
+      upsertEntry(user.id, normalized)
+        .then(() => setSyncStatus("기록 저장 완료"))
+        .catch((error) => {
+          console.warn("Supabase entry upsert failed", error);
+          setSyncStatus("실패");
+          setAuthError(getErrorMessage(error));
+        });
+    }
     setTab("calendar");
   };
 
@@ -127,11 +184,23 @@ export default function App() {
   const addSampleEntry = (entry: Omit<Entry, "id" | "createdAt">) => {
     const sampleDate = state.testToday || dateKey(new Date());
     const createdAt = new Date(`${sampleDate}T09:30:00`).toISOString();
+    const sampleEntry = { ...entry, id: createId(), createdAt };
     setCalendarFocusDate(sampleDate);
     setState((current) => reconcileLetters({
       ...current,
-      entries: [{ ...entry, id: `${Date.now()}`, createdAt }, ...current.entries]
+      entries: [sampleEntry, ...current.entries]
     }));
+    if (user) {
+      setSyncStatus("샘플 저장 중");
+      setAuthError(null);
+      upsertEntry(user.id, sampleEntry)
+        .then(() => setSyncStatus("샘플 저장 완료"))
+        .catch((error) => {
+          console.warn("Supabase sample entry upsert failed", error);
+          setSyncStatus("실패");
+          setAuthError(getErrorMessage(error));
+        });
+    }
     setTab("calendar");
   };
 
@@ -141,6 +210,9 @@ export default function App() {
     try {
       const session = await signInWithGoogle();
       setUser(session?.user || null);
+      if (session?.user) {
+        await runFullSync(session.user, state);
+      }
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "로그인에 실패했어.");
     } finally {
@@ -154,20 +226,57 @@ export default function App() {
   };
 
   const setTheme = (theme: ColorTheme) => {
-    setState((current) => ({ ...current, theme }));
+    setState((current) => {
+      const next = { ...current, theme };
+      if (user) upsertRemoteSettings(user.id, next).catch((error) => console.warn("Supabase theme sync failed", error));
+      return next;
+    });
   };
 
   const setEnergyColorMode = (energyColorMode: EnergyColorMode) => {
-    setState((current) => ({ ...current, energyColorMode }));
+    setState((current) => {
+      const next = { ...current, energyColorMode };
+      if (user) upsertRemoteSettings(user.id, next).catch((error) => console.warn("Supabase energy color sync failed", error));
+      return next;
+    });
   };
 
   const deleteEntries = (entryIds: string[]) => {
     const ids = new Set(entryIds);
+    if (user) {
+      deleteRemoteEntries(user.id, entryIds).catch((error) => console.warn("Supabase delete entry failed", error));
+    }
     setState((current) => ({
       ...current,
       entries: current.entries.filter((entry) => !ids.has(entry.id))
     }));
   };
+
+  const applyNotificationSettings = async (settings: AppState["settings"]) => {
+    try {
+      if (!settings.enabled) {
+        await cancelLogNotifications();
+        setNotificationStatus("꺼짐");
+        return;
+      }
+      const result = await scheduleLogNotifications(settings);
+      setNotificationStatus(`${result.status}${result.count ? ` · ${result.count}개` : ""}`);
+    } catch (error) {
+      console.warn("Notification scheduling failed", error);
+      setNotificationStatus(error instanceof Error ? error.message : "예약 실패");
+    }
+  };
+
+  useEffect(() => {
+    getNotificationPermissionStatus()
+      .then(setNotificationStatus)
+      .catch(() => setNotificationStatus("확인 실패"));
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated || !state.settings.enabled) return;
+    applyNotificationSettings(state.settings);
+  }, [hydrated]);
 
   const content = {
     capture: <CaptureScreen onAddEntry={addEntry} getNow={() => nowForState(state)} energyColorMode={state.energyColorMode} />,
@@ -188,13 +297,26 @@ export default function App() {
             ...current,
             letters: letters.map((letter) => (letter.id === letterId ? { ...letter, postscript } : letter))
           }));
+          if (user) {
+            const next = {
+              ...state,
+              letters: state.letters.map((letter) => (letter.id === letterId ? { ...letter, postscript } : letter))
+            };
+            upsertRemoteSettings(user.id, next).catch((error) => console.warn("Supabase postscript sync failed", error));
+          }
         }}
       />
     ),
     settings: (
       <SettingsScreen
         settings={state.settings}
-        onChange={(settings) => setState((current) => ({ ...current, settings }))}
+        notificationStatus={notificationStatus}
+        onChange={(settings) => setState((current) => {
+          const next = { ...current, settings };
+          applyNotificationSettings(settings);
+          if (user) upsertRemoteSettings(user.id, next).catch((error) => console.warn("Supabase notification settings sync failed", error));
+          return next;
+        })}
       />
     ),
     appSettings: (
@@ -204,7 +326,11 @@ export default function App() {
         calendarEnergyMode={state.calendarEnergyMode}
         onChangeTheme={setTheme}
         onChangeEnergyColorMode={setEnergyColorMode}
-        onChangeCalendarEnergyMode={(calendarEnergyMode) => setState((current) => ({ ...current, calendarEnergyMode }))}
+        onChangeCalendarEnergyMode={(calendarEnergyMode) => setState((current) => {
+          const next = { ...current, calendarEnergyMode };
+          if (user) upsertRemoteSettings(user.id, next).catch((error) => console.warn("Supabase calendar mode sync failed", error));
+          return next;
+        })}
       />
     ),
     dev: (
@@ -214,7 +340,7 @@ export default function App() {
         onAddSampleEntry={addSampleEntry}
       />
     )
-  }[tab];
+  }[activeTab];
 
   return (
     <AppThemeProvider theme={theme}>
@@ -249,8 +375,10 @@ export default function App() {
                 user={user}
                 loading={authLoading}
                 error={authError}
+                syncStatus={syncStatus}
                 onGoogleLogin={handleGoogleLogin}
                 onSignOut={handleSignOut}
+                onSync={() => runFullSync()}
               />
               <Pressable
                 style={[styles.menuListItem, { borderTopColor: theme.border }]}
@@ -266,7 +394,7 @@ export default function App() {
           </>
         ) : null}
         <View style={styles.body}>{content}</View>
-        <BottomTabs active={tab} onChange={setTab} />
+        <BottomTabs active={activeTab} onChange={setTab} />
       </SafeAreaView>
     </AppThemeProvider>
   );

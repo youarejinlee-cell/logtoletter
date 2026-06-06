@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { CloverBadge } from "../components/CloverBadge";
 import { Screen } from "../components/Screen";
 import { energyPalettes } from "../lib/energyColors";
+import { createId } from "../lib/ids";
 import { useAppTheme } from "../lib/theme";
 import { EnergyColorMode, Entry, Mood } from "../types/domain";
 
@@ -24,7 +25,8 @@ const hints = [
   ["배울 점", "오늘 ~에게 배운 게 있다면 "],
   ["숨겨진 욕망 발견", "나도 몰랐는데, 사실 나는 "],
   ["고민되는 것", "요즘 고민되는 건 "],
-  ["먹은 것", "아까 먹은 "]
+  ["먹은 것", "아까 먹은 "],
+  ["쇼츠에서 본", "쇼츠에서 본 건데 "]
 ];
 
 const positiveMoods: Array<{ key: Mood; label: string }> = [
@@ -287,7 +289,7 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
           const text = textDraft.current.trim();
           if (!text || !mood || !energy) return;
           onAddEntry({
-            id: `${Date.now()}`,
+            id: createId(),
             text,
             mood,
             energy,

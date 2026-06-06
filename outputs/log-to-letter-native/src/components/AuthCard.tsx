@@ -7,11 +7,13 @@ type Props = {
   user: User | null;
   loading?: boolean;
   error?: string | null;
+  syncStatus?: string | null;
   onGoogleLogin: () => void;
   onSignOut: () => void;
+  onSync?: () => void;
 };
 
-export function AuthCard({ user, loading, error, onGoogleLogin, onSignOut }: Props) {
+export function AuthCard({ user, loading, error, syncStatus, onGoogleLogin, onSignOut, onSync }: Props) {
   const theme = useAppTheme();
   const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split("@")[0] || "Log to Letter";
   const expoGoRedirectUri = getNativeRedirectUri();
@@ -26,6 +28,13 @@ export function AuthCard({ user, loading, error, onGoogleLogin, onSignOut }: Pro
           <Text style={styles.title}>Profile</Text>
           <Text style={styles.text}>{displayName}</Text>
           <Text style={[styles.sub, { color: theme.tint }]}>{user.email || "Google 계정"}</Text>
+          {syncStatus ? <Text style={styles.syncStatus}>서버 동기화: {syncStatus}</Text> : null}
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {onSync ? (
+            <Pressable style={styles.textButton} onPress={onSync}>
+              <Text style={[styles.textButtonLabel, { color: theme.tint }]}>지금 동기화</Text>
+            </Pressable>
+          ) : null}
           <Pressable style={styles.textButton} onPress={onSignOut}>
             <Text style={[styles.textButtonLabel, { color: theme.tint }]}>로그아웃</Text>
           </Pressable>
@@ -84,6 +93,11 @@ const styles = StyleSheet.create({
   },
   error: {
     color: "#d92d20",
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  syncStatus: {
+    color: "#657064",
     fontSize: 12,
     fontWeight: "800"
   },

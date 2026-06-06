@@ -5,10 +5,11 @@ import { NotificationSettings } from "../types/domain";
 
 type Props = {
   settings: NotificationSettings;
+  notificationStatus?: string | null;
   onChange: (settings: NotificationSettings) => void;
 };
 
-export function SettingsScreen({ settings, onChange }: Props) {
+export function SettingsScreen({ settings, notificationStatus, onChange }: Props) {
   const theme = useAppTheme();
 
   return (
@@ -19,6 +20,7 @@ export function SettingsScreen({ settings, onChange }: Props) {
     >
       <View style={styles.panel}>
         <Text style={styles.sectionTitle}>알림 설정</Text>
+        {notificationStatus ? <Text style={styles.status}>예약 상태 · {notificationStatus}</Text> : null}
         <View style={styles.row}>
           <Text style={styles.label}>알림</Text>
           <View style={styles.switchWrap}>
@@ -99,6 +101,11 @@ const styles = StyleSheet.create({
     color: "#18241b",
     fontSize: 16,
     fontWeight: "900"
+  },
+  status: {
+    color: "#657064",
+    fontSize: 13,
+    fontWeight: "800"
   },
   field: {
     gap: 6

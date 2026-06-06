@@ -536,9 +536,14 @@ function EntryList({
                   </View>
                 ) : null}
                 <Text style={styles.mood}>{moodLabels[entry.mood]}</Text>
-                <View style={[styles.energyBadge, { backgroundColor: entryEnergyLevel.color }]}>
-                  <Text style={[styles.energyText, { color: entryEnergyLevel.textColor }]}>{entry.energy}</Text>
-                </View>
+                <CloverBadge
+                  color={entryEnergyLevel.color}
+                  label={String(entry.energy)}
+                  size={24}
+                  textColor={entryEnergyLevel.textColor}
+                  shadowOpacity={0.18}
+                  glowColor="rgba(85, 85, 85, 0.08)"
+                />
               </View>
               <Text style={styles.date}>{compactDate ? formatTimeLabel(entry.createdAt) : `${formatDateLabel(dateKey(entry.createdAt))} · ${formatTimeLabel(entry.createdAt)}`}</Text>
             </View>
@@ -928,18 +933,6 @@ const styles = StyleSheet.create({
     color: "#657064",
     fontSize: 13,
     fontWeight: "800"
-  },
-  energyBadge: {
-    alignItems: "center",
-    justifyContent: "center",
-    width: 26,
-    height: 26,
-    borderRadius: 999
-  },
-  energyText: {
-    color: "#263329",
-    fontSize: 12,
-    fontWeight: "900"
   },
   text: {
     color: "#18241b",
