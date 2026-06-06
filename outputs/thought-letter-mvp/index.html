@@ -6,15 +6,15 @@
     <title>Log to Letter</title>
     <meta name="theme-color" content="#2f8f54" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.png?v=95" type="image/png" />
-    <link rel="stylesheet" href="./styles.css?v=95" />
+    <link rel="icon" href="./icon.png?v=109" type="image/png" />
+    <link rel="stylesheet" href="./styles.css?v=109" />
   </head>
   <body>
     <div class="app-shell">
       <aside class="sidebar" aria-label="앱 메뉴">
         <div class="brand">
           <div class="brand-mark" aria-hidden="true">
-            <img src="./icon.png?v=95" alt="" />
+            <img src="./icon.png?v=109" alt="" />
           </div>
           <div>
             <p class="eyebrow">미래의 나에게 보내는 지금의 나</p>
@@ -28,15 +28,17 @@
             <strong id="authStatusTitle">로컬 모드</strong>
             <span id="authStatusText">이 기기에만 저장 중이야.</span>
           </div>
-          <form class="auth-form" id="authForm">
-            <label>
-              <span>이메일</span>
-              <input id="authEmailInput" type="email" autocomplete="email" placeholder="you@example.com" />
-            </label>
-            <button class="secondary-button" id="authSubmitButton" type="submit">로그인 링크 받기</button>
-            <div class="auth-divider"><span>또는</span></div>
+          <div class="profile-card" id="profileCard" hidden>
+            <div class="profile-avatar" id="profileAvatar" aria-hidden="true">L</div>
+            <div>
+              <strong id="profileName">Log to Letter</strong>
+              <span id="profileEmail">계정이 연결됐어.</span>
+              <small>클라우드 동기화됨</small>
+            </div>
+          </div>
+          <div class="auth-form" id="authForm">
             <button class="secondary-button social-button" id="googleLoginButton" type="button">Google로 계속하기</button>
-          </form>
+          </div>
           <button class="text-button" id="signOutButton" type="button" hidden>로그아웃</button>
         </section>
 
@@ -50,7 +52,7 @@
             캘린더
           </button>
           <button class="nav-button" data-view="letter" type="button">
-            <img class="nav-app-icon" src="./icon.png?v=95" alt="" aria-hidden="true" />
+            <img class="nav-app-icon" src="./icon.png?v=109" alt="" aria-hidden="true" />
             받은 편지함
           </button>
           <button class="nav-button" data-view="settings" type="button">
@@ -80,6 +82,7 @@
               <h2 id="captureTitle">무슨 생각하고 있어?</h2>
               <p class="lead">지금 남긴 생각들이 미래의 너에게 도착할 거야.</p>
             </div>
+            <span class="status-pill" id="captureStorageStatus">이 기기에 저장 중</span>
           </div>
 
           <form class="capture-panel" id="entryForm">
@@ -104,6 +107,7 @@
               <button type="button" data-prompt="아까 쇼핑한 건 ">아까 쇼핑한 것</button>
               <button type="button" data-prompt="오늘 ~에게 배운 게 있다면 ">배울 점</button>
               <button type="button" data-prompt="나도 몰랐는데, 사실 나는 ">숨겨진 욕망 발견</button>
+              <button type="button" data-prompt="요즘 고민되는 건 ">고민되는 것</button>
               <button type="button" data-prompt="아까 먹은 ">먹은 것</button>
             </div>
 
@@ -221,48 +225,64 @@
         <section class="view" id="letterView" aria-labelledby="letterTitle">
           <div class="page-heading">
             <div>
-              <p class="eyebrow">WEEKLY</p>
-              <h2 id="letterTitle">지난 주의 편지</h2>
+              <p class="eyebrow">INBOX</p>
+              <h2 id="letterTitle">받은 편지함</h2>
               <p class="lead">지난 날의 네가 보낸 편지를 확인해봐.</p>
             </div>
-            <button class="secondary-button" id="shareLetterButton" type="button">공유하기</button>
           </div>
 
-          <section class="letter-period-nav" aria-label="편지 기간 이동">
-            <button class="icon-button" id="prevLetterButton" type="button" aria-label="지난 주 편지">‹</button>
-            <div>
-              <span>지난 주</span>
-              <strong id="letterPeriodLabel">기간 준비 중</strong>
-              <small id="letterSendDateLabel">편지 받은 날 준비 중</small>
-              <small id="letterNextStatus">다음 편지 준비 중</small>
-            </div>
-            <button class="icon-button" id="nextLetterButton" type="button" aria-label="다음 주 편지">›</button>
+          <section class="login-required-card" id="letterLoginGate" hidden>
+            <strong>받은 편지함은 로그인하고 열어볼 수 있어.</strong>
+            <p>AI가 지난 기록을 읽고 편지를 써주는 기능이라, 네 기록을 계정에 안전하게 묶어둔 다음 작동하게 할게.</p>
           </section>
 
-          <article class="letter-paper" id="letterPaper">
-            <p class="muted">아직 전해줄 편지가 없어.</p>
-          </article>
+          <div id="weeklyLetterPanel">
+            <div class="letter-detail-actions">
+              <button class="text-button" id="backToInboxButton" type="button">← 받은 편지목록으로</button>
+            </div>
 
-          <section class="insights-grid" aria-label="주간 분석">
-            <div class="insight-block">
-              <h3>생각 속 반복된 키워드</h3>
-              <ul id="themeList"></ul>
-            </div>
-            <div class="insight-block">
-              <h3>다음 주에 해볼 것</h3>
-              <ul id="recommendationList"></ul>
-            </div>
-          </section>
+            <section class="letter-period-nav" aria-label="편지 기간 이동">
+              <button class="icon-button" id="prevLetterButton" type="button" aria-label="지난 주 편지">‹</button>
+              <div>
+                <span>지난 주</span>
+                <strong id="letterPeriodLabel">기간 준비 중</strong>
+                <small id="letterSendDateLabel">편지 받은 날 준비 중</small>
+                <small id="letterNextStatus">다음 편지 준비 중</small>
+              </div>
+              <button class="icon-button" id="nextLetterButton" type="button" aria-label="다음 주 편지">›</button>
+            </section>
 
-          <form class="letter-postscript" id="letterPostscriptForm">
-            <label class="field full">
-              <span>추신</span>
-              <textarea id="letterPostscriptInput" rows="4" placeholder="이 편지를 읽고 지금의 내가 남기고 싶은 말을 적어봐."></textarea>
-            </label>
-            <div class="action-row">
-              <button class="primary-button" id="letterPostscriptSaveButton" type="submit">저장하기</button>
+            <article class="letter-paper" id="letterPaper">
+              <p class="muted">아직 전해줄 편지가 없어.</p>
+            </article>
+
+            <section class="insights-grid" aria-label="주간 분석">
+              <div class="insight-block">
+                <h3 id="themeListTitle">생각 속 반복된 키워드</h3>
+                <ul id="themeList"></ul>
+              </div>
+              <div class="insight-block">
+                <h3>다음 주에 해볼 것</h3>
+                <ul id="recommendationList"></ul>
+              </div>
+            </section>
+
+            <form class="letter-postscript" id="letterPostscriptForm">
+              <label class="field full">
+                <span>추신</span>
+                <textarea id="letterPostscriptInput" rows="4" placeholder="이 편지를 읽고 지금의 내가 남기고 싶은 말을 적어봐."></textarea>
+              </label>
+              <div class="action-row">
+                <button class="primary-button" id="letterPostscriptSaveButton" type="submit">저장하기</button>
+              </div>
+            </form>
+
+            <div class="letter-bottom-actions">
+              <button class="secondary-button" id="shareLetterButton" type="button">공유하기</button>
             </div>
-          </form>
+          </div>
+
+          <section class="monthly-letter-panel" id="monthlyLetterPanel" hidden aria-label="월간 편지함"></section>
         </section>
 
         <section class="view" id="settingsView" aria-labelledby="settingsTitle">
@@ -276,6 +296,11 @@
           </div>
 
           <form class="settings-panel" id="settingsForm">
+            <section class="login-required-card compact" id="notificationLoginGate" hidden>
+              <strong>기록 알림은 로그인 후에 켤 수 있어.</strong>
+              <p>나중에 네이티브 앱 푸시 토큰을 계정과 연결해야 해서, 알림 설정은 계정 기준으로 저장할게.</p>
+            </section>
+
             <div class="settings-toggle-row">
               <span id="notificationStatusLabel">알림 꺼짐</span>
               <label class="notification-toggle" title="알림 켜기" aria-label="알림 켜기">
@@ -419,8 +444,8 @@
     <div class="toast" id="appToast" role="status" aria-live="polite" aria-atomic="true"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./supabase-config.js?v=95"></script>
-    <script src="./supabase-config.local.js?v=95"></script>
-    <script src="./app.js?v=95"></script>
+    <script src="./supabase-config.js?v=109"></script>
+    <script src="./supabase-config.local.js?v=109"></script>
+    <script src="./app.js?v=109"></script>
   </body>
 </html>

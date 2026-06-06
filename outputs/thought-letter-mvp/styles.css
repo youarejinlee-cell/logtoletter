@@ -167,6 +167,87 @@ button {
   font-size: 15px;
 }
 
+.profile-card {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #cce5bf;
+  border-radius: 8px;
+  background: #f3faee;
+}
+
+.profile-card[hidden] {
+  display: none;
+}
+
+.profile-avatar {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  background: var(--green);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.profile-card strong,
+.profile-card span,
+.profile-card small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-card strong {
+  font-size: 14px;
+}
+
+.profile-card span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.profile-card small {
+  margin-top: 3px;
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.login-required-card {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 18px;
+  border: 1px solid #cfe7c5;
+  border-radius: 8px;
+  background: #f3faee;
+}
+
+.login-required-card[hidden] {
+  display: none;
+}
+
+.login-required-card.compact {
+  margin-bottom: 0;
+}
+
+.login-required-card strong {
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.login-required-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
 .auth-form {
   display: grid;
   gap: 8px;
@@ -1056,7 +1137,7 @@ select {
   font-weight: 800;
   isolation: isolate;
   --day-bg: var(--clover-soft);
-  --day-shadow: rgba(34, 95, 48, 0.16);
+  --day-shadow: rgba(85, 85, 85, 0.12);
 }
 
 .calendar-day::before {
@@ -1064,6 +1145,7 @@ select {
   position: absolute;
   inset: 6px;
   z-index: -1;
+  pointer-events: none;
   background:
     radial-gradient(circle at 50% 30%, var(--day-bg) 0 34%, transparent 35%),
     radial-gradient(circle at 31% 62%, var(--day-bg) 0 34%, transparent 35%),
@@ -1077,6 +1159,7 @@ select {
   position: absolute;
   inset: 2px;
   z-index: -2;
+  pointer-events: none;
   background: transparent;
 }
 
@@ -1100,27 +1183,27 @@ select {
 
 .calendar-day.energy-gray {
   --day-bg: #9a9a9a;
-  --day-shadow: rgba(85, 85, 85, 0.22);
+  --day-shadow: rgba(85, 85, 85, 0.12);
 }
 
 .calendar-day.energy-red {
   --day-bg: #ff4d4f;
-  --day-shadow: rgba(255, 77, 79, 0.22);
+  --day-shadow: rgba(85, 85, 85, 0.12);
 }
 
 .calendar-day.energy-yellow {
   --day-bg: #ffc400;
-  --day-shadow: rgba(255, 196, 0, 0.28);
+  --day-shadow: rgba(85, 85, 85, 0.12);
 }
 
 .calendar-day.energy-green {
   --day-bg: #19b85a;
-  --day-shadow: rgba(25, 184, 90, 0.22);
+  --day-shadow: rgba(85, 85, 85, 0.12);
 }
 
 .calendar-day.energy-blue {
   --day-bg: #1e8bff;
-  --day-shadow: rgba(30, 139, 255, 0.22);
+  --day-shadow: rgba(85, 85, 85, 0.12);
 }
 
 .calendar-day.energy-yellow > span {
@@ -1135,18 +1218,19 @@ select {
 .calendar-day.today:not(.energy-gray, .energy-red, .energy-yellow, .energy-green, .energy-blue) {
   color: var(--signal-green);
   --day-bg: #c9edbc;
-  --day-shadow: rgba(15, 123, 62, 0.24);
+  --day-shadow: rgba(85, 85, 85, 0.12);
 }
 
 .calendar-day.selected {
   outline: 0;
 }
 
+.calendar-day.selected::before {
+  filter: none;
+}
+
 .calendar-day.selected::after {
-  background:
-    radial-gradient(circle at 50% 30%, rgba(47, 143, 84, 0.34) 0 34%, transparent 35%),
-    radial-gradient(circle at 31% 62%, rgba(47, 143, 84, 0.34) 0 34%, transparent 35%),
-    radial-gradient(circle at 69% 62%, rgba(47, 143, 84, 0.34) 0 34%, transparent 35%);
+  background: transparent;
 }
 
 .calendar-day strong {
@@ -1277,6 +1361,18 @@ select {
   font-weight: 800;
 }
 
+.status-pill[data-mode="cloud"] {
+  border-color: #b7dec1;
+  background: #eaf8e8;
+  color: var(--green);
+}
+
+.status-pill[data-mode="local"] {
+  border-color: #ddd8cf;
+  background: #fbf8f1;
+  color: var(--muted);
+}
+
 .letter-paper {
   min-height: 330px;
   padding: clamp(22px, 4vw, 42px);
@@ -1333,6 +1429,75 @@ select {
   background: var(--panel);
 }
 
+.monthly-letter-panel {
+  display: grid;
+  gap: 22px;
+}
+
+.monthly-letter-panel[hidden] {
+  display: none;
+}
+
+.monthly-letter-group {
+  display: grid;
+  gap: 14px;
+}
+
+.monthly-letter-group h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.monthly-letter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.monthly-letter-card {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  min-height: 190px;
+  padding: 18px 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.monthly-letter-card:hover {
+  border-color: #b7dec1;
+  background: #f7fcf4;
+}
+
+.monthly-letter-card img {
+  width: min(120px, 68%);
+  aspect-ratio: 1;
+  object-fit: contain;
+}
+
+.monthly-letter-card strong {
+  max-width: 100%;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.monthly-letter-card span {
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.letter-detail-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin: -8px 0 12px;
+}
+
 .letter-period-nav span,
 .letter-period-nav small {
   display: block;
@@ -1386,6 +1551,12 @@ select {
 .letter-postscript textarea {
   min-height: 112px;
   resize: vertical;
+}
+
+.letter-bottom-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
 }
 
 .stepper {

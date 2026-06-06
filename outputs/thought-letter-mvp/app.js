@@ -2,7 +2,9 @@ const STORAGE_KEY = "thought-letter-mvp-v1";
 const LETTER_VERSION = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const weekdayLabels = ["일", "월", "화", "수", "목", "금", "토"];
-const SUPABASE_CONFIG = window.LOG_TO_LETTER_SUPABASE || {};
+function getSupabaseConfig() {
+  return window.LOG_TO_LETTER_SUPABASE || {};
+}
 
 const moods = [
   { key: "calm", label: "😌 차분함", category: "positive" },
@@ -73,6 +75,7 @@ let calendarEnergyMode = "first";
 let recentSortKey = "date";
 let recentSortDirection = "desc";
 let selectedLetterOffset = 0;
+let letterViewMode = "monthly";
 let activeLetter = null;
 let speechRecognition = null;
 let speechListeningButton = null;
@@ -117,14 +120,26 @@ function saveState() {
   queueCloudSync();
 }
 
+function isLoggedIn() {
+  return Boolean(authUser);
+}
+
 function isSupabaseConfigured() {
-  return Boolean(SUPABASE_CONFIG.url && SUPABASE_CONFIG.anonKey);
+  const config = getSupabaseConfig();
+  return Boolean(config.url && config.anonKey);
 }
 
 function initSupabaseClient() {
   if (!isSupabaseConfigured() || !window.supabase?.createClient) return null;
   if (!supabaseClient) {
-    supabaseClient = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+    const config = getSupabaseConfig();
+    supabaseClient = window.supabase.createClient(config.url, config.anonKey, {
+      auth: {
+        detectSessionInUrl: true,
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    });
   }
   return supabaseClient;
 }
@@ -133,6 +148,48 @@ function setAuthSession(session) {
   authSession = session || null;
   authUser = authSession?.user || null;
   cloudReady = Boolean(supabaseClient && authUser);
+}
+
+function hasOAuthHash() {
+  return window.location.hash.includes("access_token=") && window.location.hash.includes("refresh_token=");
+}
+
+function cleanAuthUrl() {
+  window.history.replaceState(null, "", `${window.location.pathname}?v=109`);
+}
+
+async function recoverSessionFromHash() {
+  if (!supabaseClient || !hasOAuthHash()) return null;
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const accessToken = params.get("access_token");
+  const refreshToken = params.get("refresh_token");
+  if (!accessToken || !refreshToken) return null;
+
+  const { data, error } = await supabaseClient.auth.setSession({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  });
+  cleanAuthUrl();
+  if (error) {
+    console.warn("Supabase hash session failed", error);
+    return null;
+  }
+  return data.session;
+}
+
+function loadScript(src) {
+  return new Promise((resolve) => {
+    const script = document.createElement("script");
+    script.src = src;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+  });
+}
+
+async function ensureSupabaseConfigLoaded() {
+  if (isSupabaseConfigured()) return;
+  await loadScript(`./supabase-config.local.js?v=109-${Date.now()}`);
 }
 
 function getMoodCategory(mood) {
@@ -386,18 +443,21 @@ function renderAuth() {
   if (!card) return;
   const title = $("#authStatusTitle");
   const text = $("#authStatusText");
+  const profileCard = $("#profileCard");
+  const profileAvatar = $("#profileAvatar");
+  const profileName = $("#profileName");
+  const profileEmail = $("#profileEmail");
   const form = $("#authForm");
   const signOutButton = $("#signOutButton");
-  const submitButton = $("#authSubmitButton");
   const googleButton = $("#googleLoginButton");
   const setAuthButtonsDisabled = (disabled) => {
-    submitButton.disabled = disabled;
     googleButton.disabled = disabled;
   };
 
   if (!isSupabaseConfigured()) {
     title.textContent = "Supabase 연결 전";
     text.textContent = "supabase-config.js에 URL과 anon key를 넣어줘.";
+    profileCard.hidden = true;
     form.hidden = false;
     setAuthButtonsDisabled(true);
     signOutButton.hidden = true;
@@ -407,6 +467,7 @@ function renderAuth() {
   if (!window.supabase?.createClient) {
     title.textContent = "로그인 준비 중";
     text.textContent = "Supabase 라이브러리를 불러오는 중이야.";
+    profileCard.hidden = true;
     form.hidden = false;
     setAuthButtonsDisabled(true);
     signOutButton.hidden = true;
@@ -415,22 +476,44 @@ function renderAuth() {
 
   setAuthButtonsDisabled(false);
   if (authUser) {
-    title.textContent = "로그인됨";
-    text.textContent = authUser.email || "계정이 연결됐어.";
+    const displayName = authUser.user_metadata?.full_name || authUser.user_metadata?.name || authUser.email?.split("@")[0] || "Log to Letter";
+    const initial = [...displayName.trim()][0] || "L";
+    title.textContent = "Profile";
+    text.textContent = "기록이 계정에 연결되어 있어.";
+    profileAvatar.textContent = initial.toUpperCase();
+    profileName.textContent = displayName;
+    profileEmail.textContent = authUser.email || "Google 계정";
+    profileCard.hidden = false;
     form.hidden = true;
     signOutButton.hidden = false;
   } else {
     title.textContent = "계정 연결";
-    text.textContent = "이메일로 로그인 링크를 받을 수 있어.";
+    text.textContent = "Google 계정으로 연결할 수 있어.";
+    profileCard.hidden = true;
     form.hidden = false;
     signOutButton.hidden = true;
   }
 }
 
 async function initAuth() {
+  await ensureSupabaseConfigLoaded();
   initSupabaseClient();
+  if (!supabaseClient && hasOAuthHash()) {
+    cleanAuthUrl();
+    showToast("설정 연결 후 다시 로그인해줘");
+  }
   renderAuth();
   if (!supabaseClient) return;
+
+  const hashSession = await recoverSessionFromHash();
+  if (hashSession) {
+    setAuthSession(hashSession);
+    await loadCloudState();
+    render();
+    renderAuth();
+    showToast("로그인됐어");
+    return;
+  }
 
   const { data, error } = await supabaseClient.auth.getSession();
   if (error) {
@@ -454,21 +537,6 @@ async function initAuth() {
     render();
     renderAuth();
   });
-}
-
-async function sendLoginLink(email) {
-  if (!supabaseClient || !email) return;
-  const redirectTo = `${window.location.origin}${window.location.pathname}`;
-  const { error } = await supabaseClient.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: redirectTo },
-  });
-  if (error) {
-    showToast("로그인 링크 전송 실패");
-    console.warn("Supabase login failed", error);
-    return;
-  }
-  showToast("로그인 링크를 보냈어");
 }
 
 async function signInWithGoogle() {
@@ -663,6 +731,7 @@ function writeTestLog(message) {
 function startPromptLoop() {
   if (promptTimer) window.clearTimeout(promptTimer);
   updateNextPrompt();
+  if (!isLoggedIn()) return;
   if (!state.settings.enabled) return;
 
   const next = getNextPromptDate();
@@ -826,6 +895,13 @@ function renderCalendar() {
 
   const year = calendarCursor.getFullYear();
   const month = calendarCursor.getMonth();
+  const selectedDate = new Date(`${selectedDateKey}T00:00:00`);
+  if (selectedDate.getFullYear() !== year || selectedDate.getMonth() !== month) {
+    const today = new Date();
+    selectedDateKey = today.getFullYear() === year && today.getMonth() === month
+      ? getDateKey(today)
+      : getDateKey(new Date(year, month, 1));
+  }
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
   const entryCounts = new Map();
@@ -975,6 +1051,30 @@ function getLetterSendDate(offset = selectedLetterOffset) {
 
 function canMoveToPreviousLetter() {
   return getLetterSendDate(selectedLetterOffset + 1) >= getFirstInputStartDate();
+}
+
+function getAvailableLetterItems() {
+  const firstSend = getFirstLetterSendDate();
+  const latestSend = getLatestLetterSendDate();
+  if (latestSend < firstSend) return [];
+
+  const items = [];
+  let cursor = firstSend;
+  while (cursor <= latestSend) {
+    const offset = Math.round((latestSend.getTime() - cursor.getTime()) / (7 * DAY_MS));
+    const periodStart = getLetterPeriodStart(cursor);
+    const letter = getOrCreateLetter(periodStart, cursor);
+    items.push({
+      offset,
+      letter,
+      deliveredAt: cursor.toISOString(),
+      monthKey: `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`,
+      monthLabel: `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월`,
+    });
+    cursor = addDays(cursor, 7);
+  }
+
+  return items.sort((a, b) => new Date(b.deliveredAt) - new Date(a.deliveredAt));
 }
 
 function getLetterPeriodStart(deliveredAt) {
@@ -1197,8 +1297,11 @@ function buildLetter(entries, periodStart, deliveredAt) {
   if (!entries.length) {
     return {
       id: deliveredAt,
-      title: "이 기간에는 아직 전해줄 생각이 적었어",
-      html: `<p class="muted">이 기간에는 기록이 아직 없어. 다음 편지에는 지금의 생각 몇 개만 남겨도, 나중의 나한테 지금의 너를 전해줄 수 있어.</p>`,
+      title: "지난주는 바쁜 한 주였던 것 같아",
+      html: `
+        <h3>지난주는 바쁜 한 주였던 것 같아</h3>
+        <p>이번 편지에 담을 기록은 없었어. 그럴 땐 전에 받은 편지를 한 번 더 돌아보면서 다음 주를 생각해보는 것도 좋을 것 같아.</p>
+      `,
       themes: [],
       recommendations: [],
       createdAt: deliveredAt,
@@ -1219,6 +1322,49 @@ function buildLetter(entries, periodStart, deliveredAt) {
   const mood = getMoodLabel(analysis.dominantMood);
   const highMood = getMoodLabel(highest.mood);
   const lowMood = getMoodLabel(lowest.mood);
+
+  if (entries.length < 3) {
+    const sortedEntries = [...entries].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    const averageEnergy = getAverageEnergy(entries);
+    const summaryTone =
+      averageEnergy >= 4
+        ? "즐거웠나봐"
+        : averageEnergy <= 2.5
+          ? "기분이 안 좋았을지도 모르겠어"
+          : "여러 감정이 오갔나봐";
+    const title = `기록이 많지는 않지만 ${summaryTone}`;
+    const entrySummary = sortedEntries
+      .map((entry) => `<li><strong>${getDateKey(entry.createdAt)}</strong> ${escapeHtml(getEntryPreview(entry))}</li>`)
+      .join("");
+    const moodSummary = sortedEntries.map((entry) => getMoodLabel(entry.mood)).join(", ");
+
+    return {
+      id: deliveredAt,
+      title,
+      html: `
+        <div class="letter-meta">
+          <span>${entries.length}개의 기록</span>
+          <span>${periodLabel}</span>
+          <span>평균 에너지 ${averageEnergy.toFixed(1)}/5</span>
+          <span>감정 ${moodSummary}</span>
+        </div>
+        <h3>${title}</h3>
+        <p>기록이 많지는 않지만, 남겨둔 걸 보니 지난주엔 <strong>${summaryTone}</strong>.</p>
+        <ul>${entrySummary}</ul>
+        <p>이번 편지는 의미를 크게 해석하기보다, 네가 남긴 장면들을 이렇게 짧게 다시 보여줄게. 다음 주에 기록이 조금 더 쌓이면 그때는 어떤 순간에 마음이 좋아지고, 어떤 순간에 지쳤는지도 더 또렷하게 볼 수 있을 거야.</p>
+      `,
+      themes: analysis.themes.length ? analysis.themes : sortedEntries.map((entry) => getEntryPreview(entry).split(/\s+/).slice(0, 3).join(" ")),
+      recommendations,
+      createdAt: deliveredAt,
+      deliveredAt,
+      periodStart: periodStart.toISOString(),
+      periodEnd: periodEnd.toISOString(),
+      periodLabel,
+      postscript: savedLetter?.postscript || "",
+      version: LETTER_VERSION,
+    };
+  }
+
   const letterTitle = makeLetterTitle(analysis, topicInsight, highest, lowest);
   const topicParagraph = topicInsight
     ? `<p><strong>${topicInsight.label}</strong>에 관한 말이 반복됐어. 특히 에너지가 낮은 기록 안에서도 이 주제가 보였어. ${topicInsight.observation} ${topicInsight.recommendation} 건강 잘 챙기는 것도 잊지 말자. 잘하고 있어.</p>`
@@ -1304,12 +1450,95 @@ function syncLetters() {
   if (changed) saveState();
 }
 
+function getLetterCardKeyword(letter) {
+  const title = letter.title || "";
+  const themes = letter.themes || [];
+  if (title.includes("잘해내고") || title.includes("일")) return "잘해내고 싶은 마음";
+  if (title.includes("관계") || title.includes("사람")) return "사람들 사이 내가 원하는 것";
+  if (title.includes("연애") || title.includes("설렘")) return "관계 안에서 바라는 것";
+  if (title.includes("몸") || title.includes("리듬")) return "몸이 알려준 신호";
+  if (title.includes("스스로") || title.includes("나 자신")) return "나를 대하는 방식";
+  if (title.includes("쉬어야") || title.includes("닳았던")) return "쉬어야 하는 신호";
+  if (themes[0]) return themes[0];
+  return "그때의 마음";
+}
+
+function renderMonthlyLetters() {
+  const panel = $("#monthlyLetterPanel");
+  if (!panel) return;
+  const items = getAvailableLetterItems();
+  if (!items.length) {
+    panel.innerHTML = `<p class="muted">아직 도착한 편지가 없어.</p>`;
+    return;
+  }
+
+  const groups = new Map();
+  for (const item of items) {
+    if (!groups.has(item.monthKey)) {
+      groups.set(item.monthKey, { label: item.monthLabel, items: [] });
+    }
+    groups.get(item.monthKey).items.push(item);
+  }
+
+  panel.innerHTML = [...groups.values()]
+    .map(
+      (group) => `
+        <section class="monthly-letter-group">
+          <h3>${escapeHtml(group.label)}</h3>
+          <div class="monthly-letter-grid">
+            ${group.items
+              .map(
+                (item) => `
+                  <button class="monthly-letter-card" type="button" data-letter-offset="${item.offset}" aria-label="${getDateKey(item.deliveredAt)} 받은 편지 보기">
+                    <img src="./icon.png?v=109" alt="" aria-hidden="true" />
+                    <strong>${escapeHtml(getLetterCardKeyword(item.letter))}</strong>
+                    <span>${getDateKey(item.deliveredAt)}</span>
+                  </button>
+                `
+              )
+              .join("")}
+          </div>
+        </section>
+      `
+    )
+    .join("");
+}
+
 function renderLetter() {
   const paper = $("#letterPaper");
   const themeList = $("#themeList");
   const recommendationList = $("#recommendationList");
   const postscriptInput = $("#letterPostscriptInput");
   const postscriptSaveButton = $("#letterPostscriptSaveButton");
+  const letterLoginGate = $("#letterLoginGate");
+  const weeklyPanel = $("#weeklyLetterPanel");
+  const monthlyPanel = $("#monthlyLetterPanel");
+
+  if (!isLoggedIn()) {
+    activeLetter = null;
+    if (letterLoginGate) letterLoginGate.hidden = false;
+    $("#letterPeriodLabel").textContent = "로그인 후 확인";
+    $("#letterSendDateLabel").textContent = "편지 받은 날은 계정 연결 후 보여줄게.";
+    $("#letterNextStatus").textContent = "다음 편지도 로그인 후 계산할게.";
+    $("#prevLetterButton").disabled = true;
+    $("#nextLetterButton").disabled = true;
+    $("#shareLetterButton").disabled = true;
+    if (weeklyPanel) weeklyPanel.hidden = true;
+    if (monthlyPanel) monthlyPanel.hidden = true;
+    return;
+  }
+
+  if (letterLoginGate) letterLoginGate.hidden = true;
+  if (weeklyPanel) weeklyPanel.hidden = letterViewMode !== "weekly";
+  if (monthlyPanel) monthlyPanel.hidden = letterViewMode !== "monthly";
+
+  if (letterViewMode === "monthly") {
+    activeLetter = null;
+    $("#shareLetterButton").disabled = true;
+    renderMonthlyLetters();
+    return;
+  }
+
   const { periodStart, periodEnd, sendDate } = getLetterPeriod();
   const selectedLetter = getOrCreateLetter(periodStart, periodEnd);
   activeLetter = selectedLetter;
@@ -1325,6 +1554,7 @@ function renderLetter() {
   postscriptSaveButton.disabled = false;
   postscriptInput.value = selectedLetter.postscript || "";
   paper.innerHTML = selectedLetter.html;
+  $("#themeListTitle").textContent = selectedLetter.themes.length <= 1 ? "이번 기록에서 두드러진 말" : "생각 속 반복된 키워드";
   themeList.innerHTML = (selectedLetter.themes.length ? selectedLetter.themes : ["아직 반복어가 적어."])
     .map((item) => `<li>${escapeHtml(item)}</li>`)
     .join("");
@@ -1448,13 +1678,23 @@ function openShareDialog() {
 }
 
 function renderSettings() {
+  const notificationLoginGate = $("#notificationLoginGate");
+  const requiresLogin = !isLoggedIn();
   $("#startTimeInput").value = state.settings.startTime;
   $("#dndStartInput").value = state.settings.dndStart;
   $("#dndEndInput").value = state.settings.dndEnd;
   $("#intervalInput").value = state.settings.intervalMinutes;
+  if (notificationLoginGate) notificationLoginGate.hidden = !requiresLogin;
   if (!("Notification" in window)) {
     permissionStatus.textContent = "미지원";
     $("#notificationStatusLabel").textContent = "알림 미지원";
+    $("#scheduleOptions").hidden = true;
+    $("#notificationToggle").checked = false;
+    $("#notificationToggle").disabled = true;
+    $("#notificationIcon").textContent = "🔕";
+  } else if (requiresLogin) {
+    permissionStatus.textContent = "로그인 필요";
+    $("#notificationStatusLabel").textContent = "로그인 후 설정";
     $("#scheduleOptions").hidden = true;
     $("#notificationToggle").checked = false;
     $("#notificationToggle").disabled = true;
@@ -1469,6 +1709,13 @@ function renderSettings() {
     $("#notificationIcon").textContent = isOn ? "🔔" : "🔕";
   }
   renderTestConsole();
+}
+
+function renderStorageStatus() {
+  const captureStatus = $("#captureStorageStatus");
+  if (!captureStatus) return;
+  captureStatus.textContent = isLoggedIn() ? "계정에 동기화 중" : "이 기기에 저장 중";
+  captureStatus.dataset.mode = isLoggedIn() ? "cloud" : "local";
 }
 
 async function renderTestConsole() {
@@ -1511,6 +1758,7 @@ function render() {
   renderMoodOptions();
   renderEnergyMeter();
   renderVoiceControls();
+  renderStorageStatus();
   renderCalendar();
   renderLetter();
   renderSettings();
@@ -1791,7 +2039,27 @@ document.addEventListener("click", (event) => {
 
   const navButton = event.target.closest(".nav-button");
   if (navButton) {
+    if (navButton.dataset.view === "letter") {
+      letterViewMode = "monthly";
+      activeLetter = null;
+      renderLetter();
+    }
     switchView(navButton.dataset.view);
+  }
+
+  const monthlyLetterCard = event.target.closest("[data-letter-offset]");
+  if (monthlyLetterCard) {
+    selectedLetterOffset = Number(monthlyLetterCard.dataset.letterOffset);
+    letterViewMode = "weekly";
+    renderLetter();
+    return;
+  }
+
+  if (event.target.closest("#backToInboxButton")) {
+    letterViewMode = "monthly";
+    activeLetter = null;
+    renderLetter();
+    return;
   }
 
   const deleteButton = event.target.closest("[data-delete]");
@@ -1946,6 +2214,11 @@ $("#letterPostscriptForm").addEventListener("submit", (event) => {
 
 $("#settingsForm").addEventListener("submit", (event) => {
   event.preventDefault();
+  if (!isLoggedIn()) {
+    showToast("로그인하면 알림 설정을 저장할 수 있어");
+    renderSettings();
+    return;
+  }
   state.settings = {
     startTime: $("#startTimeInput").value,
     dndStart: $("#dndStartInput").value,
@@ -1957,12 +2230,6 @@ $("#settingsForm").addEventListener("submit", (event) => {
   saveState();
   startPromptLoop();
   render();
-});
-
-$("#authForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const email = $("#authEmailInput").value.trim();
-  await sendLoginLink(email);
 });
 
 $("#googleLoginButton").addEventListener("click", signInWithGoogle);
@@ -1988,6 +2255,12 @@ document.querySelectorAll("[data-prompt]").forEach((button) => {
 
 $("#notificationToggle").addEventListener("change", async (event) => {
   if (!("Notification" in window)) return;
+  if (!isLoggedIn()) {
+    event.target.checked = false;
+    showToast("로그인하면 알림을 켤 수 있어");
+    renderSettings();
+    return;
+  }
   const wantsOn = event.target.checked;
   state.settings.notificationsEnabled = wantsOn;
   state.settings.enabled = wantsOn;
@@ -2073,11 +2346,17 @@ const startupParams = new URLSearchParams(window.location.search);
 async function boot() {
   if (startupParams.get("seed") === "love-prev") {
     seedLovePreviousWeekData();
-    window.history.replaceState(null, "", `${window.location.pathname}?v=95`);
+    window.history.replaceState(null, "", `${window.location.pathname}?v=109`);
   } else {
-    render();
+    renderAuth();
   }
-  await initAuth();
+  try {
+    await initAuth();
+  } catch (error) {
+    console.warn("Auth boot failed", error);
+    renderAuth();
+  }
+  render();
   startPromptLoop();
 
   if ("serviceWorker" in navigator) {
