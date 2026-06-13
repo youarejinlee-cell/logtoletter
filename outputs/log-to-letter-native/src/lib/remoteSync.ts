@@ -1,5 +1,6 @@
 import { User } from "@supabase/supabase-js";
 import { AppState, Entry, Letter, Mood, NotificationSettings } from "../types/domain";
+import { normalizeEnergyPercent } from "./energyColors";
 import { createId, isUuid } from "./ids";
 import { normalizeLetterPaperStyle } from "./storage";
 import { supabase } from "./supabase";
@@ -20,7 +21,11 @@ type LetterRow = {
   period_end: string;
   delivered_at: string;
   summary_json?: { keyword?: string } | null;
+  themes?: string[] | null;
+  recommendations?: string[] | null;
   postscript?: string | null;
+  model?: string | null;
+  prompt_version?: string | null;
 };
 
 type NotificationSettingsRow = {
@@ -40,6 +45,7 @@ type AppSettingsRow = {
     energyColorMode?: AppState["energyColorMode"];
     calendarEnergyMode?: AppState["calendarEnergyMode"];
     letterPaperStyle?: AppState["letterPaperStyle"];
+    targetMoods?: AppState["targetMoods"];
   } | null;
 };
 
@@ -48,8 +54,9 @@ const MAX_INTERVAL_MINUTES = 120;
 const INTERVAL_STEP_MINUTES = 5;
 
 function dateKey(value: string | Date) {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
   const date = typeof value === "string" ? new Date(value) : value;
-  return date.toISOString().slice(0, 10);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 function splitPeriod(periodLabel: string, deliveredAt: string) {
@@ -65,7 +72,11 @@ function splitPeriod(periodLabel: string, deliveredAt: string) {
 }
 
 function normalizeEntries(entries: Entry[]) {
-  return entries.map((entry) => (isUuid(entry.id) ? entry : { ...entry, id: createId() }));
+  return entries.map((entry) => ({
+    ...entry,
+    id: isUuid(entry.id) ? entry.id : createId(),
+    energy: normalizeEnergyPercent(entry.energy)
+  }));
 }
 
 function entryToRow(userId: string, entry: Entry) {
@@ -74,7 +85,7 @@ function entryToRow(userId: string, entry: Entry) {
     user_id: userId,
     text: entry.text,
     mood: entry.mood,
-    energy: entry.energy,
+    energy: normalizeEnergyPercent(entry.energy),
     source: "native",
     created_at: entry.createdAt,
     updated_at: new Date().toISOString()
@@ -86,7 +97,7 @@ function rowToEntry(row: EntryRow): Entry {
     id: row.id,
     text: row.text,
     mood: row.mood as Mood,
-    energy: row.energy,
+    energy: normalizeEnergyPercent(row.energy),
     createdAt: row.created_at
   };
 }
@@ -103,10 +114,11 @@ function letterToRow(userId: string, letter: Letter) {
     body: letter.body,
     html: letter.body.replace(/\n/g, "<br>"),
     summary_json: { keyword: letter.keyword },
-    themes: [],
-    recommendations: [],
+    themes: letter.themes || [],
+    recommendations: letter.recommendations || [],
     postscript: letter.postscript || "",
-    prompt_version: "native-rule-v1",
+    model: letter.model || null,
+    prompt_version: letter.promptVersion || "native-rule-v1",
     updated_at: new Date().toISOString()
   };
 }
@@ -117,9 +129,13 @@ function rowToLetter(row: LetterRow): Letter {
     title: row.title,
     body: row.body,
     periodLabel: `${row.period_start} ~ ${row.period_end}`,
-    deliveredAt: `${row.delivered_at}T00:00:00.000Z`,
+    deliveredAt: `${row.delivered_at}T00:00:00`,
     keyword: row.summary_json?.keyword || "그때의 마음",
-    postscript: row.postscript || ""
+    postscript: row.postscript || "",
+    model: row.model || undefined,
+    promptVersion: row.prompt_version || undefined,
+    themes: row.themes || [],
+    recommendations: row.recommendations || []
   };
 }
 
@@ -173,7 +189,7 @@ export async function upsertProfile(user: User) {
     email: user.email,
     display_name: user.user_metadata?.full_name || user.user_metadata?.name || user.email,
     updated_at: new Date().toISOString()
-  });
+  }, { onConflict: "user_id" });
   if (error) throw error;
 }
 
@@ -199,7 +215,8 @@ export async function pushAppState(userId: string, state: AppState) {
       theme: normalized.theme,
       energyColorMode: normalized.energyColorMode,
       calendarEnergyMode: normalized.calendarEnergyMode,
-      letterPaperStyle: normalized.letterPaperStyle
+      letterPaperStyle: normalized.letterPaperStyle,
+      targetMoods: normalized.targetMoods || []
     },
     updated_at: new Date().toISOString()
   });
@@ -216,7 +233,7 @@ export async function pullAppState(userId: string, local: AppState): Promise<App
     settingsResult
   ] = await Promise.all([
     supabase.from("entries").select("id,text,mood,energy,created_at").eq("user_id", userId).order("created_at", { ascending: false }),
-    supabase.from("letters").select("id,title,body,period_start,period_end,delivered_at,summary_json,postscript").eq("user_id", userId).order("delivered_at", { ascending: false }),
+    supabase.from("letters").select("id,title,body,period_start,period_end,delivered_at,summary_json,themes,recommendations,postscript,model,prompt_version").eq("user_id", userId).order("delivered_at", { ascending: false }),
     supabase.from("notification_settings").select("enabled,schedule_mode,start_time,interval_minutes,dnd_start,dnd_end,weekdays,fixed_times").eq("user_id", userId).maybeSingle(),
     supabase.from("app_settings").select("preferences").eq("user_id", userId).maybeSingle()
   ]);
@@ -236,6 +253,7 @@ export async function pullAppState(userId: string, local: AppState): Promise<App
     theme: preferences.theme || local.theme,
     energyColorMode: preferences.energyColorMode || local.energyColorMode,
     calendarEnergyMode: preferences.calendarEnergyMode || local.calendarEnergyMode,
+    targetMoods: preferences.targetMoods || local.targetMoods || [],
     letterPaperStyle: normalizeLetterPaperStyle(preferences.letterPaperStyle || local.letterPaperStyle)
   };
 }
@@ -248,6 +266,24 @@ export async function syncAppState(user: User, local: AppState): Promise<AppStat
   }
   const normalized = await pushAppState(user.id, local);
   return pullAppState(user.id, normalized);
+}
+
+export async function generateDueLetters(today?: string) {
+  const { data, error } = await supabase.functions.invoke("generate-letter", {
+    body: today ? { today } : {}
+  });
+  if (error) {
+    const context = (error as { context?: unknown }).context;
+    if (context instanceof Response) {
+      const message = await context.clone().json()
+        .then((body) => body?.error || body?.message || JSON.stringify(body))
+        .catch(() => context.clone().text())
+        .catch(() => error.message);
+      throw new Error(`${message} (${context.status})`);
+    }
+    throw error;
+  }
+  return data as { generated?: number; updated?: number; skipped?: number; letters?: string[] };
 }
 
 export async function upsertEntry(userId: string, entry: Entry) {

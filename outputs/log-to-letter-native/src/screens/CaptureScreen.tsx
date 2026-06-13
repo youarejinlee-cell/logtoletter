@@ -1,11 +1,12 @@
 import { useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { PanResponder, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { CloverBadge } from "../components/CloverBadge";
 import { Screen } from "../components/Screen";
-import { energyPalettes } from "../lib/energyColors";
+import { entryCategoryOptions, suggestEntryCategory } from "../lib/entryCategories";
+import { getEnergyPalette } from "../lib/energyColors";
 import { createId } from "../lib/ids";
 import { useAppTheme } from "../lib/theme";
-import { EnergyColorMode, Entry, Mood } from "../types/domain";
+import { EnergyColorMode, Entry, EntryCategory, Mood } from "../types/domain";
 
 type Props = {
   onAddEntry: (entry: Entry) => void;
@@ -68,7 +69,8 @@ const negativeMoods: Array<{ key: Mood; label: string }> = [
   { key: "irritated", label: "😒 짜증남" },
   { key: "jealous", label: "🫣 질투" },
   { key: "prideHurt", label: "😣 자존심상함" },
-  { key: "sensitive", label: "🌶️ 예민함" }
+  { key: "sensitive", label: "🫨 예민함" },
+  { key: "regret", label: "😞 후회됨" }
 ];
 
 const textPlaceholders = [
@@ -161,17 +163,44 @@ function composeHangul(input: string) {
 
 export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyColorMode }: Props) {
   const theme = useAppTheme();
-  const energyLevels = energyPalettes[energyColorMode].levels;
+  const energyLevels = getEnergyPalette(energyColorMode, theme.tint).levels;
   const inputRef = useRef<TextInput | null>(null);
+  const sliderRef = useRef<View | null>(null);
+  const sliderLeft = useRef(0);
   const textDraft = useRef("");
   const [hasText, setHasText] = useState(false);
   const [mood, setMood] = useState<Mood | null>(null);
-  const [energy, setEnergy] = useState<number | null>(null);
+  const [category, setCategory] = useState<EntryCategory>("other");
+  const [categoryTouched, setCategoryTouched] = useState(false);
+  const [energy, setEnergy] = useState(50);
+  const [sliderWidth, setSliderWidth] = useState(1);
   const [placeholder, setPlaceholder] = useState(randomPlaceholder);
   const [positiveExpanded, setPositiveExpanded] = useState(false);
   const [neutralExpanded, setNeutralExpanded] = useState(false);
   const [negativeExpanded, setNegativeExpanded] = useState(false);
-  const canSubmit = Boolean(hasText && mood && energy);
+  const energyValue = energy;
+  const canSubmit = Boolean(hasText && mood);
+  const energyLevel = energyLevels.find((level) => level.value === energyValue) || energyLevels[0];
+
+  const updateEnergyFromPageX = (pageX: number) => {
+    const ratio = Math.max(0, Math.min(1, (pageX - sliderLeft.current) / sliderWidth));
+    setEnergy(Math.round(ratio * 10) * 10);
+  };
+
+  const measureSlider = (pageX?: number) => {
+    sliderRef.current?.measureInWindow((x, _y, width) => {
+      sliderLeft.current = x;
+      setSliderWidth(width || 1);
+      if (typeof pageX === "number") updateEnergyFromPageX(pageX);
+    });
+  };
+
+  const energyPanResponder = PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: (event) => measureSlider(event.nativeEvent.pageX),
+    onPanResponderMove: (event) => updateEnergyFromPageX(event.nativeEvent.pageX)
+  });
 
   const updateDraft = (next: string) => {
     const composed = composeHangul(next);
@@ -181,6 +210,7 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
     }
     const nextHasText = Boolean(composed.trim());
     setHasText((current) => (current === nextHasText ? current : nextHasText));
+    if (!categoryTouched) setCategory(suggestEntryCategory(composed));
   };
 
   const replaceInputText = (next: string) => {
@@ -188,6 +218,7 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
     textDraft.current = composed;
     inputRef.current?.setNativeProps({ text: composed });
     setHasText(Boolean(composed.trim()));
+    if (!categoryTouched) setCategory(suggestEntryCategory(composed));
   };
 
   return (
@@ -218,6 +249,90 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
             <Text style={[styles.hintText, { color: theme.tint }]}>{label}</Text>
           </Pressable>
         ))}
+      </View>
+
+      <Text style={styles.sectionTitle}>기록 카테고리</Text>
+      <View style={styles.categoryPanel}>
+        <Text style={styles.categoryHint}>기록을 보고 먼저 골라둘게. 필요하면 바꿔줘.</Text>
+        <View style={styles.chips}>
+          {entryCategoryOptions.map((option) => (
+            <Pressable
+              key={option.key}
+              style={[styles.chip, category === option.key && { borderColor: theme.tint, backgroundColor: theme.soft }]}
+              onPress={() => {
+                setCategory(option.key);
+                setCategoryTouched(true);
+              }}
+            >
+              <Text style={[styles.chipText, category === option.key && { color: theme.tint }]}>{option.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      <Text style={styles.sectionTitle}>사용한 에너지(%)</Text>
+      <View style={styles.energyPanel}>
+        <View style={styles.energyHeader}>
+          <Text style={styles.energyPercent}>{energy}%</Text>
+          <View style={styles.energyScale}>
+            <Text style={styles.energyScaleText}>적게 씀</Text>
+            <View style={styles.energyScaleBar}>
+              <Text style={styles.energyScaleArrow}>←</Text>
+              <View style={styles.energyScaleLine} />
+              <Text style={styles.energyScaleArrow}>→</Text>
+            </View>
+            <Text style={styles.energyScaleText}>많이 씀</Text>
+          </View>
+        </View>
+        <View
+          ref={sliderRef}
+          style={styles.sliderHitbox}
+          onLayout={(event) => {
+            setSliderWidth(event.nativeEvent.layout.width || 1);
+            requestAnimationFrame(() => measureSlider());
+          }}
+          {...energyPanResponder.panHandlers}
+        >
+          <View style={styles.sliderTrack}>
+            <View
+              style={[
+                styles.sliderFill,
+                {
+                  width: `${energyValue}%`,
+                  backgroundColor: energyLevel.color
+                }
+              ]}
+            />
+          </View>
+          <View style={styles.sliderTicks}>
+            {energyLevels.map((level) => (
+              <View key={level.value} style={styles.sliderTickButton}>
+                <View style={[styles.sliderTick, energyValue >= level.value && { backgroundColor: energyLevel.color }]} />
+              </View>
+            ))}
+          </View>
+          <View
+            pointerEvents="none"
+            style={[
+              styles.sliderThumb,
+              {
+                left: `${energyValue}%`
+              }
+            ]}
+          >
+            <CloverBadge
+              color={energyLevel.color}
+              glowColor={energyLevel.glow}
+              size={30}
+              shadowOpacity={0.22}
+            />
+          </View>
+        </View>
+        <View style={styles.sliderLabels}>
+          {energyLevels.map((level) => (
+            <Text key={level.value} style={styles.sliderLabel}>{level.value}</Text>
+          ))}
+        </View>
       </View>
 
       <Text style={styles.sectionTitle}>감정</Text>
@@ -252,31 +367,8 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
         themeSoft={theme.soft}
       />
 
-      <Text style={styles.sectionTitle}>에너지</Text>
-      <View style={styles.energyRow}>
-        {energyLevels.map((level) => (
-          <Pressable
-            key={level.value}
-            style={[
-              styles.energy,
-              { backgroundColor: energy === level.value ? theme.soft : "#fff" }
-            ]}
-            onPress={() => setEnergy(level.value)}
-          >
-            <CloverBadge
-              color={level.color}
-              glowColor={level.glow}
-              label={String(level.value)}
-              selected={energy === level.value}
-              borderColor={level.color}
-              size={46}
-              textColor={level.textColor}
-            />
-          </Pressable>
-        ))}
-      </View>
       <Text style={styles.formHint}>
-        {canSubmit ? "좋아, 이제 기록으로 남길 수 있어." : "생각, 감정, 에너지를 모두 남기면 기록할 수 있어."}
+        {canSubmit ? "좋아, 이제 기록으로 남길 수 있어." : "생각과 감정을 남기면 기록할 수 있어. 에너지는 50%에서 조정하면 돼."}
       </Text>
 
       <Pressable
@@ -284,17 +376,20 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
         style={[styles.submit, { backgroundColor: theme.tint }, !canSubmit && styles.disabled]}
         onPress={() => {
           const text = textDraft.current.trim();
-          if (!text || !mood || !energy) return;
+          if (!text || !mood) return;
           onAddEntry({
             id: createId(),
             text,
             mood,
             energy,
-            createdAt: getNow().toISOString()
+            createdAt: getNow().toISOString(),
+            category
           });
           replaceInputText("");
           setMood(null);
-          setEnergy(null);
+          setCategory("other");
+          setCategoryTouched(false);
+          setEnergy(50);
           setPlaceholder(randomPlaceholder());
         }}
       >
@@ -386,6 +481,19 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#fff"
   },
+  categoryPanel: {
+    gap: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#dfe8da",
+    borderRadius: 8,
+    backgroundColor: "#fff"
+  },
+  categoryHint: {
+    color: "#8c948b",
+    fontSize: 12,
+    fontWeight: "700"
+  },
   moodHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -426,20 +534,110 @@ const styles = StyleSheet.create({
     color: "#657064",
     fontWeight: "800"
   },
-  energyRow: {
-    flexDirection: "row",
-    gap: 8
-  },
-  energy: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 58,
-    paddingVertical: 8,
+  energyPanel: {
+    gap: 12,
+    padding: 14,
     borderWidth: 1,
     borderColor: "#dfe8da",
     borderRadius: 8,
     backgroundColor: "#fff"
+  },
+  energyHeader: {
+    gap: 8
+  },
+  energyPercent: {
+    color: "#18241b",
+    fontSize: 24,
+    fontWeight: "900"
+  },
+  energyScale: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5
+  },
+  energyScaleText: {
+    color: "#657064",
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  energyScaleBar: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    minWidth: 0
+  },
+  energyScaleLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#a5afa4"
+  },
+  energyScaleArrow: {
+    color: "#a5afa4",
+    fontSize: 12,
+    fontWeight: "900",
+    lineHeight: 14
+  },
+  sliderHitbox: {
+    position: "relative",
+    height: 42,
+    justifyContent: "center"
+  },
+  sliderTrack: {
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: "#eef1ed",
+    overflow: "hidden"
+  },
+  sliderFill: {
+    height: "100%",
+    borderRadius: 999
+  },
+  sliderTicks: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+  sliderTickButton: {
+    width: 22,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  sliderTick: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#cfd8ce"
+  },
+  sliderThumb: {
+    position: "absolute",
+    top: 6,
+    width: 30,
+    height: 30,
+    marginLeft: -15,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4
+  },
+  sliderLabels: {
+    flexDirection: "row",
+    justifyContent: "space-between"
+  },
+  sliderLabel: {
+    width: 24,
+    color: "#657064",
+    fontSize: 10,
+    fontWeight: "900",
+    textAlign: "center"
   },
   formHint: {
     marginTop: -4,

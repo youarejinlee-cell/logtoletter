@@ -31,8 +31,20 @@ export type Mood =
   | "jealous"
   | "prideHurt"
   | "sensitive"
+  | "regret"
   | "blank"
   | "complex";
+
+export type EntryCategory =
+  | "work"
+  | "relationships"
+  | "love"
+  | "family"
+  | "dream"
+  | "taste"
+  | "habit"
+  | "health"
+  | "other";
 
 export type Entry = {
   id: string;
@@ -40,6 +52,7 @@ export type Entry = {
   mood: Mood;
   energy: number;
   createdAt: string;
+  category?: EntryCategory;
 };
 
 export type Letter = {
@@ -50,6 +63,10 @@ export type Letter = {
   deliveredAt: string;
   keyword: string;
   postscript?: string;
+  model?: string;
+  promptVersion?: string;
+  themes?: string[];
+  recommendations?: string[];
 };
 
 export type NotificationSettings = {
@@ -75,6 +92,7 @@ export type AppState = {
   theme: ColorTheme;
   energyColorMode: EnergyColorMode;
   calendarEnergyMode: CalendarEnergyMode;
+  targetMoods: Mood[];
   letterPaperStyle: LetterPaperStyle;
   testToday?: string;
 };

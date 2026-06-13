@@ -10,6 +10,7 @@ outputs/log-to-letter-native/node_modules/
 outputs/log-to-letter-native/.expo/
 outputs/log-to-letter-native/dist/
 outputs/log-to-letter-native/*.log
+outputs/log-to-letter-native/supabase/.temp/
 outputs/log-to-letter-native/.env
 outputs/log-to-letter-native/.env.local
 outputs/log-to-letter-native/src/lib/supabaseConfig.ts

@@ -12,7 +12,11 @@ export function Screen({ eyebrow, title, lead, children }: Props) {
   const theme = useAppTheme();
 
   return (
-    <ScrollView contentContainerStyle={styles.content}>
+    <ScrollView
+      contentContainerStyle={styles.content}
+      keyboardDismissMode="interactive"
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.heading}>
         <Text style={[styles.eyebrow, { color: theme.tint }]}>{eyebrow}</Text>
         <Text style={styles.title}>{title}</Text>

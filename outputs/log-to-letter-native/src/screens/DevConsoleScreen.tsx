@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Screen } from "../components/Screen";
 import { useAppTheme } from "../lib/theme";
 import { Entry } from "../types/domain";
@@ -9,6 +9,7 @@ type Props = {
   notificationStatus?: string | null;
   onChangeTestToday: (date?: string) => void;
   onAddSampleEntry: (entry: Omit<Entry, "id" | "createdAt">) => void;
+  onAddStoreSampleData: () => void;
   onRefreshNotifications: () => Promise<string>;
   onSendTestNotification: () => Promise<string>;
   onCancelNotifications: () => Promise<string>;
@@ -18,17 +19,17 @@ const samples: Array<Omit<Entry, "id" | "createdAt">> = [
   {
     text: "오늘은 해야 할 일을 작게 나눠보니까 마음이 조금 가벼워졌어.",
     mood: "calm",
-    energy: 4
+    energy: 60
   },
   {
     text: "답장을 기다리면서 내가 뭘 원하는지 계속 생각하게 됐어.",
     mood: "anxious",
-    energy: 2
+    energy: 30
   },
   {
     text: "칭찬을 들었는데 괜히 하루 종일 기분이 좋았어.",
     mood: "proud",
-    energy: 5
+    energy: 80
   }
 ];
 
@@ -37,26 +38,37 @@ function todayKey() {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+function addDaysToKey(value: string, days: number) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const base = match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : new Date();
+  base.setDate(base.getDate() + days);
+  return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}-${String(base.getDate()).padStart(2, "0")}`;
+}
+
 export function DevConsoleScreen({
   testToday,
   notificationStatus,
   onChangeTestToday,
   onAddSampleEntry,
+  onAddStoreSampleData,
   onRefreshNotifications,
   onSendTestNotification,
   onCancelNotifications
 }: Props) {
   const theme = useAppTheme();
   const displayToday = testToday || todayKey();
-  const dateInputRef = useRef<TextInput | null>(null);
-  const draftDate = useRef(displayToday);
+  const [draftDate, setDraftDate] = useState(displayToday);
   const [lastAddedText, setLastAddedText] = useState<string | null>(null);
   const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
   const [notificationBusy, setNotificationBusy] = useState(false);
 
+  const setTestDate = (value: string) => {
+    setDraftDate(value);
+    onChangeTestToday(value);
+  };
+
   useEffect(() => {
-    draftDate.current = displayToday;
-    dateInputRef.current?.setNativeProps({ text: displayToday });
+    setDraftDate(displayToday);
   }, [displayToday]);
 
   return (
@@ -122,39 +134,56 @@ export function DevConsoleScreen({
 
       <View style={styles.panel}>
         <Text style={styles.sectionTitle}>오늘 날짜 테스트</Text>
-        <Text style={styles.description}>YYYY-MM-DD 형식으로 넣으면 편지 생성 기준 날짜도 그날로 볼게.</Text>
-        <TextInput
-          ref={dateInputRef}
-          defaultValue={displayToday}
-          onChangeText={(value) => {
-            draftDate.current = value;
-          }}
-          placeholder="2026-06-06"
-          style={styles.input}
-        />
+        <Text style={styles.description}>버튼으로 날짜를 바꾸면 편지 생성 기준 날짜도 바로 그날로 볼게.</Text>
+        <View style={[styles.dateDisplay, { backgroundColor: theme.soft }]}>
+          <Text style={[styles.dateDisplayText, { color: theme.tint }]}>{draftDate}</Text>
+        </View>
         <View style={styles.actions}>
           <Pressable
-            style={[styles.secondaryButton, { backgroundColor: theme.tint }]}
-            onPress={() => {
-              if (/^\d{4}-\d{2}-\d{2}$/.test(draftDate.current)) {
-                onChangeTestToday(draftDate.current);
-              }
-            }}
+            style={[styles.secondaryButton, { backgroundColor: theme.soft }]}
+            onPress={() => setTestDate(addDaysToKey(draftDate, -1))}
           >
-            <Text style={[styles.secondaryButtonText, { color: "#fff" }]}>적용</Text>
+            <Text style={[styles.secondaryButtonText, { color: theme.tint }]}>하루 전</Text>
           </Pressable>
+          <Pressable
+            style={[styles.secondaryButton, { backgroundColor: theme.soft }]}
+            onPress={() => setTestDate(addDaysToKey(draftDate, 1))}
+          >
+            <Text style={[styles.secondaryButtonText, { color: theme.tint }]}>다음날</Text>
+          </Pressable>
+        </View>
+        <View style={styles.actions}>
+          <Pressable
+            style={[styles.secondaryButton, { backgroundColor: theme.soft }]}
+            onPress={() => setTestDate(addDaysToKey(draftDate, -7))}
+          >
+            <Text style={[styles.secondaryButtonText, { color: theme.tint }]}>일주일 전</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.secondaryButton, { backgroundColor: theme.soft }]}
+            onPress={() => setTestDate(addDaysToKey(draftDate, 7))}
+          >
+            <Text style={[styles.secondaryButtonText, { color: theme.tint }]}>다음 주</Text>
+          </Pressable>
+        </View>
+        <View style={styles.actions}>
           <Pressable style={[styles.secondaryButton, { backgroundColor: theme.soft }]} onPress={() => {
-            draftDate.current = todayKey();
-            dateInputRef.current?.setNativeProps({ text: draftDate.current });
+            setDraftDate(todayKey());
             onChangeTestToday(undefined);
           }}>
             <Text style={[styles.secondaryButtonText, { color: theme.tint }]}>실제 오늘로</Text>
           </Pressable>
           <Pressable style={[styles.secondaryButton, { backgroundColor: theme.soft }]} onPress={() => {
-            draftDate.current = "2026-06-13";
-            dateInputRef.current?.setNativeProps({ text: draftDate.current });
-            onChangeTestToday("2026-06-13");
+            setTestDate("2026-05-31");
           }}>
+            <Text style={[styles.secondaryButtonText, { color: theme.tint }]}>2026-05-31</Text>
+          </Pressable>
+        </View>
+        <View style={styles.actions}>
+          <Pressable style={[styles.secondaryButton, { backgroundColor: theme.soft }]} onPress={() => setTestDate("2026-06-06")}>
+            <Text style={[styles.secondaryButtonText, { color: theme.tint }]}>2026-06-06</Text>
+          </Pressable>
+          <Pressable style={[styles.secondaryButton, { backgroundColor: theme.soft }]} onPress={() => setTestDate("2026-06-13")}>
             <Text style={[styles.secondaryButtonText, { color: theme.tint }]}>2026-06-13</Text>
           </Pressable>
         </View>
@@ -173,12 +202,26 @@ export function DevConsoleScreen({
             }}
           >
             <Text style={styles.sampleText}>{sample.text}</Text>
-            <Text style={styles.sampleMeta}>감정 {sample.mood} · 에너지 {sample.energy}</Text>
+            <Text style={styles.sampleMeta}>감정 {sample.mood} · 에너지 {sample.energy}%</Text>
           </Pressable>
         ))}
         {lastAddedText ? (
           <Text style={[styles.successText, { color: theme.tint }]}>{lastAddedText}</Text>
         ) : null}
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.sectionTitle}>스토어 스크린샷 데이터</Text>
+        <Text style={styles.description}>5월 말부터 6월 중순까지의 기록과 편지가 생기도록 샘플 데이터를 넣을게.</Text>
+        <Pressable
+          style={[styles.secondaryButton, { backgroundColor: theme.tint }]}
+          onPress={() => {
+            onAddStoreSampleData();
+            setLastAddedText("스토어 스크린샷용 데이터를 넣었어.");
+          }}
+        >
+          <Text style={[styles.secondaryButtonText, { color: "#fff" }]}>스토어 샘플 데이터 넣기</Text>
+        </Pressable>
       </View>
     </Screen>
   );
@@ -260,15 +303,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19
   },
-  input: {
+  dateDisplay: {
+    alignItems: "center",
     paddingHorizontal: 12,
-    paddingVertical: 11,
-    borderWidth: 1,
-    borderColor: "#dfe8da",
-    borderRadius: 8,
-    color: "#18241b",
-    fontSize: 15,
-    fontWeight: "800"
+    paddingVertical: 13,
+    borderRadius: 8
+  },
+  dateDisplayText: {
+    fontSize: 18,
+    fontWeight: "900"
   },
   actions: {
     flexDirection: "row",

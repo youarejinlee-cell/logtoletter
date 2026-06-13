@@ -1,25 +1,32 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { CloverBadge } from "../components/CloverBadge";
 import { Screen } from "../components/Screen";
-import { energyPalettes } from "../lib/energyColors";
 import { themePalettes } from "../lib/theme";
-import { CalendarEnergyMode, ColorTheme, EnergyColorMode, LetterPaperStyle } from "../types/domain";
+import { ColorTheme, LetterPaperStyle, Mood } from "../types/domain";
 
 type Props = {
   theme: ColorTheme;
-  energyColorMode: EnergyColorMode;
-  calendarEnergyMode: CalendarEnergyMode;
+  targetMoods: Mood[];
   letterPaperStyle: LetterPaperStyle;
   onChangeTheme: (theme: ColorTheme) => void;
-  onChangeEnergyColorMode: (mode: EnergyColorMode) => void;
-  onChangeCalendarEnergyMode: (mode: CalendarEnergyMode) => void;
+  onChangeTargetMoods: (moods: Mood[]) => void;
   onChangeLetterPaperStyle: (style: LetterPaperStyle) => void;
 };
 
-const calendarEnergyOptions: Array<{ key: CalendarEnergyMode; label: string }> = [
-  { key: "first", label: "그날 처음으로 고른 에너지" },
-  { key: "last", label: "그날 마지막으로 고른 에너지" },
-  { key: "most", label: "그날 가장 많이 고른 에너지" }
+const positiveMoodOptions: Array<{ key: Mood; label: string }> = [
+  { key: "calm", label: "😌 차분함" },
+  { key: "joy", label: "😊 좋음" },
+  { key: "moved", label: "🥹 뭉클함" },
+  { key: "recovered", label: "🌱 회복됨" },
+  { key: "happy", label: "😄 행복함" },
+  { key: "delight", label: "😁 기쁨" },
+  { key: "excited", label: "💓 설렘" },
+  { key: "fun", label: "😆 재밌음" },
+  { key: "hopeful", label: "🌤️ 희망적임" },
+  { key: "grateful", label: "🙏 고마움" },
+  { key: "proud", label: "✨ 뿌듯함" },
+  { key: "peaceful", label: "🕊️ 평화로움" },
+  { key: "lucky", label: "🍀 행운" },
+  { key: "selfEsteem", label: "💪 자존감상승" }
 ];
 
 const letterPaperOptions: Array<{ key: LetterPaperStyle; label: string; description: string }> = [
@@ -31,16 +38,49 @@ const letterPaperOptions: Array<{ key: LetterPaperStyle; label: string; descript
 
 export function AppSettingsScreen({
   theme,
-  energyColorMode,
-  calendarEnergyMode,
+  targetMoods,
   letterPaperStyle,
   onChangeTheme,
-  onChangeEnergyColorMode,
-  onChangeCalendarEnergyMode,
+  onChangeTargetMoods,
   onChangeLetterPaperStyle
 }: Props) {
+  const toggleTargetMood = (mood: Mood) => {
+    if (targetMoods.includes(mood)) {
+      onChangeTargetMoods(targetMoods.filter((item) => item !== mood));
+      return;
+    }
+    if (targetMoods.length >= 3) return;
+    onChangeTargetMoods([...targetMoods, mood]);
+  };
+
   return (
-    <Screen eyebrow="Settings" title="설정" lead="앱의 색감을 고를 수 있어.">
+    <Screen eyebrow="Settings" title="설정">
+      <View style={styles.panel}>
+        <Text style={styles.sectionTitle}>추구 감정</Text>
+        <Text style={styles.description}>네가 가장 느끼고 싶은 감정을 골라줘. 모아보기에서 가장 먼저 확인하게 해둘게</Text>
+        <View style={styles.moodWrap}>
+          {positiveMoodOptions.map((mood) => {
+            const active = targetMoods.includes(mood.key);
+            const disabled = !active && targetMoods.length >= 3;
+            return (
+              <Pressable
+                key={mood.key}
+                disabled={disabled}
+                style={[
+                  styles.moodChip,
+                  { borderColor: themePalettes[theme].border, backgroundColor: "#fff" },
+                  active && { borderColor: themePalettes[theme].tint, backgroundColor: themePalettes[theme].soft, borderWidth: 2 },
+                  disabled && styles.disabledChip
+                ]}
+                onPress={() => toggleTargetMood(mood.key)}
+              >
+                <Text style={[styles.moodText, active && { color: themePalettes[theme].tint }, disabled && styles.disabledText]}>{mood.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
       <View style={styles.panel}>
         <Text style={styles.sectionTitle}>컬러 테마</Text>
         <View style={styles.themeGrid}>
@@ -56,57 +96,6 @@ export function AppSettingsScreen({
             >
               <View style={[styles.themeSwatch, { backgroundColor: themePalettes[key].tint }]} />
               <Text style={styles.themeButtonText}>{themePalettes[key].label}</Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.panel}>
-        <Text style={styles.sectionTitle}>에너지 팔레트</Text>
-        <View style={styles.energyModeList}>
-          {(Object.keys(energyPalettes) as EnergyColorMode[]).map((key) => (
-            <Pressable
-              key={key}
-              style={[
-                styles.energyModeButton,
-                { borderColor: themePalettes[theme].border, backgroundColor: "#fff" },
-                energyColorMode === key && { borderColor: themePalettes[theme].tint, backgroundColor: themePalettes[theme].soft, borderWidth: 2 }
-              ]}
-              onPress={() => onChangeEnergyColorMode(key)}
-            >
-              <Text style={styles.energyModeLabel}>{energyPalettes[key].label}</Text>
-              <View style={styles.energyChipRow}>
-                {energyPalettes[key].levels.map((level) => (
-                  <CloverBadge
-                    key={level.value}
-                    color={level.color}
-                    glowColor={level.glow}
-                    label={String(level.value)}
-                    size={30}
-                    textColor={level.textColor}
-                    shadowOpacity={0.18}
-                  />
-                ))}
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.panel}>
-        <Text style={styles.sectionTitle}>캘린더에서 날짜 선택 시 에너지 표시</Text>
-        <View style={styles.calendarEnergyList}>
-          {calendarEnergyOptions.map((option) => (
-            <Pressable
-              key={option.key}
-              style={[
-                styles.calendarEnergyButton,
-                { borderColor: themePalettes[theme].border, backgroundColor: "#fff" },
-                calendarEnergyMode === option.key && { borderColor: themePalettes[theme].tint, backgroundColor: themePalettes[theme].soft, borderWidth: 2 }
-              ]}
-              onPress={() => onChangeCalendarEnergyMode(option.key)}
-            >
-              <Text style={styles.calendarEnergyText}>{option.label}</Text>
             </Pressable>
           ))}
         </View>
@@ -171,6 +160,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "900"
   },
+  description: {
+    color: "#657064",
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: "700"
+  },
+  moodWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  moodChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderRadius: 999
+  },
+  moodText: {
+    color: "#253027",
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  disabledChip: {
+    opacity: 0.4
+  },
+  disabledText: {
+    color: "#9aa39a"
+  },
   themeGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -194,37 +211,10 @@ const styles = StyleSheet.create({
     color: "#18241b",
     fontWeight: "900"
   },
-  energyModeList: {
-    gap: 10
-  },
-  energyModeButton: {
-    gap: 10,
-    padding: 12,
-    borderWidth: 1,
-    borderRadius: 8
-  },
   energyModeLabel: {
     color: "#18241b",
     fontSize: 14,
     fontWeight: "900"
-  },
-  energyChipRow: {
-    flexDirection: "row",
-    gap: 8
-  },
-  calendarEnergyList: {
-    gap: 8
-  },
-  calendarEnergyButton: {
-    padding: 12,
-    borderWidth: 1,
-    borderRadius: 8
-  },
-  calendarEnergyText: {
-    color: "#18241b",
-    fontSize: 14,
-    fontWeight: "900",
-    lineHeight: 20
   },
   letterPaperList: {
     gap: 8

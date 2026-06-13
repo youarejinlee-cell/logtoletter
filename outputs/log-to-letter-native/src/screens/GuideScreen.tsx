@@ -5,11 +5,15 @@ import { useAppTheme } from "../lib/theme";
 const guideItems = [
   {
     title: "기록",
-    body: "지금 든 생각을 적고, 감정 1개와 에너지를 함께 골라 남겨. 힌트 버튼으로 문장 시작을 잡을 수도 있어."
+    body: "지금 든 생각을 적고, 감정 1개와 사용한 에너지(%)를 함께 골라 남겨. 힌트 버튼으로 문장 시작을 잡을 수도 있어."
   },
   {
     title: "캘린더",
-    body: "날짜별 기록을 확인하고, 기간별로 모아볼 수 있어. 이달 요약에서는 자주 나온 감정과 에너지가 좋았던 날, 낮았던 날을 볼 수 있어."
+    body: "날짜별 기록을 확인하고, 이달 요약에서 자주 나온 감정과 에너지 사용량이 높았던 날, 낮았던 날을 볼 수 있어."
+  },
+  {
+    title: "모아보기",
+    body: "기간과 감정을 고르면 그 감정으로 남긴 기록만 다시 모아볼 수 있어. 최신순과 오래된순으로 정렬할 수도 있어."
   },
   {
     title: "편지보관함",
@@ -21,7 +25,7 @@ const guideItems = [
   },
   {
     title: "설정",
-    body: "메뉴의 설정에서 컬러 테마, 에너지 팔레트, 캘린더 날짜의 에너지 표시 기준을 바꿀 수 있어."
+    body: "메뉴의 설정에서 컬러 테마와 편지지 디자인을 바꿀 수 있어."
   }
 ];
 
@@ -38,7 +42,7 @@ export function GuideScreen() {
         <Text style={styles.sectionTitle}>앱 이용 순서</Text>
         <View style={styles.itemList}>
           {guideItems.map((item, index) => (
-            <View key={item.title} style={[styles.item, { borderColor: theme.border, backgroundColor: index === 0 ? theme.soft : "#fff" }]}>
+            <View key={item.title} style={[styles.item, { borderColor: theme.border }]}>
               <Text style={[styles.itemNumber, { color: theme.tint }]}>{index + 1}</Text>
               <View style={styles.itemTextWrap}>
                 <Text style={styles.itemTitle}>{item.title}</Text>
@@ -81,7 +85,8 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 13,
     borderWidth: 1,
-    borderRadius: 8
+    borderRadius: 8,
+    backgroundColor: "#fff"
   },
   itemNumber: {
     width: 24,

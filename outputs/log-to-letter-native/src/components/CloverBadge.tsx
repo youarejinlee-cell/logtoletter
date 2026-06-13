@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 type Props = {
   color: string;
-  label: string;
+  label?: string;
   size?: number;
   textColor?: string;
   selected?: boolean;
@@ -14,7 +14,7 @@ type Props = {
 
 export function CloverBadge({
   color,
-  label,
+  label = "",
   size = 44,
   textColor = "#263329",
   selected,
@@ -42,7 +42,7 @@ export function CloverBadge({
       <Leaf size={leaf} color={color} top={top} left={(size - leaf) / 2} shadowColor={glowColor} shadowOpacity={shadowOpacity} />
       <Leaf size={leaf} color={color} top={sideTop} left={left} shadowColor={glowColor} shadowOpacity={shadowOpacity} />
       <Leaf size={leaf} color={color} top={sideTop} left={right} shadowColor={glowColor} shadowOpacity={shadowOpacity} />
-      <Text style={[styles.label, { color: textColor, fontSize: size * 0.31 }]}>{label}</Text>
+      {label ? <Text style={[styles.label, { color: textColor, fontSize: size * 0.31 }]}>{label}</Text> : null}
     </View>
   );
 }
