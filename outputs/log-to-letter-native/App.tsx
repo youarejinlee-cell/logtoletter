@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Image, Platform, Pressable, StatusBar as NativeStatusBar, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import * as SplashScreen from "expo-splash-screen";
 import { User } from "@supabase/supabase-js";
 import { AuthCard } from "./src/components/AuthCard";
 import { BottomTabs, TabKey } from "./src/components/BottomTabs";
@@ -12,6 +13,7 @@ import { DevConsoleScreen } from "./src/screens/DevConsoleScreen";
 import { GuideScreen } from "./src/screens/GuideScreen";
 import { InboxScreen } from "./src/screens/InboxScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
+import { SpaceBackdrop, UniverseScreen } from "./src/screens/UniverseScreen";
 import { canUseDevTools } from "./src/lib/appVariant";
 import { createId, isUuid } from "./src/lib/ids";
 import { buildWeeklyLetter } from "./src/lib/letter";
@@ -25,14 +27,18 @@ import {
 import { deleteRemoteEntries, deleteRemoteUserData, generateDueLetters, normalizeStateIds, pullAppState, syncAppState, upsertEntry, upsertRemoteSettings } from "./src/lib/remoteSync";
 import { defaultState, loadAppState, saveAppState } from "./src/lib/storage";
 import { deleteAccount, getCurrentSession, signInWithGoogle, signOut, supabase } from "./src/lib/supabase";
-import { AppThemeProvider, themePalettes } from "./src/lib/theme";
-import { AppState, ColorTheme, Entry, Letter, Mood } from "./src/types/domain";
+import { AppThemeProvider, cosmicTheme } from "./src/lib/theme";
+import { AppState, Entry, Letter, Mood } from "./src/types/domain";
 
 const topSafePadding = Platform.select({
   ios: 44,
   android: NativeStatusBar.currentHeight || 24,
   default: 24
 });
+
+const APP_NAME = "Log Planet";
+const APP_TAGLINE = "기록이 쌓이면 나만의 행성이 돼";
+const LETTER_ARCHIVE_ENABLED = false;
 
 function addDays(date: Date, days: number) {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
@@ -101,6 +107,7 @@ function normalizeSavedLetterCopy(state: AppState): AppState {
 }
 
 function reconcileLetters(state: AppState, today = currentAppDate(state)): AppState {
+  if (!LETTER_ARCHIVE_ENABLED) return { ...state, letters: state.letters };
   if (!state.entries.length) return { ...state, letters: [] };
 
   const sortedEntries = [...state.entries].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -403,7 +410,7 @@ const storeSampleLetters: Letter[] = [
 ];
 
 export default function App() {
-  const [tab, setTab] = useState<TabKey>("capture");
+  const [tab, setTab] = useState<TabKey>("universe");
   const [state, setState] = useState<AppState>(defaultState);
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
@@ -414,8 +421,12 @@ export default function App() {
   const [calendarFocusDate, setCalendarFocusDate] = useState<string | undefined>();
   const [hydrated, setHydrated] = useState(false);
   const letters = state.letters;
-  const theme = themePalettes[state.theme];
-  const activeTab = !canUseDevTools && tab === "dev" ? "capture" : tab;
+  const theme = cosmicTheme;
+  const activeTab = (!canUseDevTools && tab === "dev") || (!LETTER_ARCHIVE_ENABLED && tab === "inbox") ? "universe" : tab;
+
+  useEffect(() => {
+    void SplashScreen.hideAsync();
+  }, []);
 
   useEffect(() => {
     loadAppState().then((loaded) => {
@@ -452,14 +463,16 @@ export default function App() {
     try {
       const synced = await syncAppState(targetUser, targetState);
       let nextState = synced;
-      try {
-        const result = await generateDueLetters(canUseDevTools ? targetState.testToday : undefined);
-        if ((result.generated || 0) + (result.updated || 0) > 0) {
-          nextState = await pullAppState(targetUser.id, synced);
+      if (LETTER_ARCHIVE_ENABLED) {
+        try {
+          const result = await generateDueLetters(canUseDevTools ? targetState.testToday : undefined);
+          if ((result.generated || 0) + (result.updated || 0) > 0) {
+            nextState = await pullAppState(targetUser.id, synced);
+          }
+        } catch (letterError) {
+          console.warn("AI letter generation failed", letterError);
+          setAuthError(`AI 편지 생성 실패: ${getErrorMessage(letterError)}`);
         }
-      } catch (letterError) {
-        console.warn("AI letter generation failed", letterError);
-        setAuthError(`AI 편지 생성 실패: ${getErrorMessage(letterError)}`);
       }
       setState(reconcileLetters(normalizeSavedLetterCopy(nextState)));
       setSyncStatus("완료");
@@ -621,14 +634,6 @@ export default function App() {
     }
   };
 
-  const setTheme = (theme: ColorTheme) => {
-    setState((current) => {
-      const next = { ...current, theme };
-      if (user) upsertRemoteSettings(user.id, next).catch((error) => console.warn("Supabase theme sync failed", error));
-      return next;
-    });
-  };
-
   const setTargetMoods = (targetMoods: Mood[]) => {
     setState((current) => {
       const next = { ...current, targetMoods };
@@ -700,6 +705,7 @@ export default function App() {
   }, [hydrated]);
 
   const content = {
+    universe: <UniverseScreen entries={state.entries} />,
     capture: <CaptureScreen onAddEntry={addEntry} getNow={() => nowForState(state)} energyColorMode={state.energyColorMode} />,
     calendar: (
       <CalendarScreen
@@ -771,10 +777,9 @@ export default function App() {
     ),
     appSettings: (
       <AppSettingsScreen
-        theme={state.theme}
         targetMoods={state.targetMoods}
         letterPaperStyle={state.letterPaperStyle}
-        onChangeTheme={setTheme}
+        letterArchiveEnabled={LETTER_ARCHIVE_ENABLED}
         onChangeTargetMoods={setTargetMoods}
         onChangeLetterPaperStyle={(letterPaperStyle) => setState((current) => {
           const next = { ...current, letterPaperStyle };
@@ -800,21 +805,30 @@ export default function App() {
 
   return (
     <AppThemeProvider theme={theme}>
-      <View style={[styles.safe, { backgroundColor: theme.page }]}>
-        <StatusBar style={theme.isDark ? "light" : "dark"} />
-        <View style={[styles.header, { borderBottomColor: theme.border, backgroundColor: theme.page }]}>
+      <View style={styles.safe}>
+        <SpaceBackdrop />
+        <StatusBar style="light" />
+        <View
+          style={[
+            styles.header,
+            {
+              borderBottomColor: theme.border,
+              backgroundColor: "rgba(7, 13, 42, 0.84)"
+            }
+          ]}
+        >
           <View style={styles.brandWrap}>
             <Image source={require("./assets/app-icon.png")} style={styles.logo} />
             <View>
-              <Text style={[styles.brand, { color: theme.text }]}>Log to Letter</Text>
-              <Text style={[styles.tagline, { color: theme.muted }]}>미래의 나에게 보내는 지금의 나</Text>
+              <Text style={[styles.brand, { color: theme.text }]}>{APP_NAME}</Text>
+              <Text style={[styles.tagline, { color: theme.muted }]}>{APP_TAGLINE}</Text>
             </View>
           </View>
           <Pressable
             style={[styles.menuButton, { backgroundColor: theme.soft }]}
             onPress={() => setMenuOpen((current) => !current)}
           >
-            <Text style={[styles.menuButtonText, { color: theme.tint }]}>{menuOpen ? "×" : "☰"}</Text>
+            <Text style={[styles.menuButtonText, { color: theme.text }]}>{menuOpen ? "×" : "☰"}</Text>
           </Pressable>
         </View>
         {menuOpen ? (
@@ -879,7 +893,7 @@ export default function App() {
           </>
         ) : null}
         <View style={styles.body}>{content}</View>
-        <BottomTabs active={activeTab} onChange={setTab} />
+        <BottomTabs active={activeTab} onChange={setTab} cosmic />
       </View>
     </AppThemeProvider>
   );
@@ -888,7 +902,7 @@ export default function App() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#f5f8f1"
+    backgroundColor: "#070d2a"
   },
   header: {
     flexDirection: "row",
@@ -899,7 +913,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#dfe8da",
-    backgroundColor: "#fbfdf8"
+    backgroundColor: "rgba(7, 13, 42, 0.84)"
   },
   brandWrap: {
     flexDirection: "row",
@@ -939,7 +953,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     zIndex: 10,
-    backgroundColor: "rgba(24, 36, 27, 0.08)"
+    backgroundColor: "rgba(3, 7, 24, 0.42)"
   },
   floatingMenu: {
     position: "absolute",

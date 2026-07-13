@@ -589,14 +589,14 @@ export function InboxScreen({ entries, letters, letterPaperStyle, onSavePostscri
                         {letterPaperStyle !== "cloudTitle" ? (
                           <View style={styles.letterBrand}>
                             <Image source={require("../../assets/app-icon.png")} style={styles.letterBrandIcon} />
-                            <Text style={styles.letterBrandText}>Log to Letter</Text>
+                            <Text style={styles.letterBrandText}>Log Planet</Text>
                           </View>
                         ) : null}
                       </View>
                       {letterPaperStyle === "cloudTitle" ? (
                         <View style={styles.letterBrand}>
                           <Image source={require("../../assets/app-icon.png")} style={styles.letterBrandIcon} />
-                          <Text style={styles.letterBrandText}>Log to Letter</Text>
+                          <Text style={styles.letterBrandText}>Log Planet</Text>
                         </View>
                       ) : null}
                     </View>

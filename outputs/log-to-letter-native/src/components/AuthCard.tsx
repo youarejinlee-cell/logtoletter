@@ -12,7 +12,7 @@ type Props = {
 
 export function AuthCard({ user, loading, error, onGoogleLogin }: Props) {
   const theme = useAppTheme();
-  const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split("@")[0] || "Log to Letter";
+  const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split("@")[0] || "Log Planet";
   const avatarUrl = user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
 
   return (

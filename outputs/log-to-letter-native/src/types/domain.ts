@@ -37,10 +37,13 @@ export type Mood =
 
 export type EntryCategory =
   | "work"
+  | "relationship"
   | "relationships"
   | "love"
   | "family"
   | "dream"
+  | "selfDiscipline"
+  | "wealth"
   | "taste"
   | "habit"
   | "attitude"

@@ -1,10 +1,10 @@
-# Log to Letter Release Prep
+# Log Planet Release Prep
 
-이 문서는 `Log to Letter` 네이티브 MVP를 App Store 배포 가능한 상태로 만들기 위한 준비 목록이다.
+이 문서는 `Log Planet` 네이티브 MVP를 App Store 배포 가능한 상태로 만들기 위한 준비 목록이다.
 
 ## 1. 현재 배포 기준
 
-- 앱 이름: `Log to Letter`
+- 앱 이름: `Log Planet`
 - Bundle ID: `com.logtoletter.app`
 - 앱 버전: `0.1.0`
 - iOS build number: `1`
@@ -18,7 +18,7 @@
 
 ## 2. 출시 전 필수 결정
 
-- [ ] 앱스토어 공개 이름을 `Log to Letter`로 확정한다.
+- [ ] 앱스토어 공개 이름을 `Log Planet`으로 확정한다.
 - [ ] 한국어 부제목을 확정한다.
 - [ ] 앱 설명 문구를 확정한다.
 - [ ] 개인정보 처리방침 URL을 만든다.
@@ -32,7 +32,7 @@
 
 ### 앱 이름
 
-`Log to Letter`
+`Log Planet`
 
 ### 부제목 후보
 
@@ -44,11 +44,11 @@
 
 ### 짧은 설명 후보
 
-`Log to Letter는 하루 중 문득 떠오른 생각과 감정을 기록하고, 시간이 지난 뒤 나의 흐름을 편지처럼 돌아볼 수 있게 돕는 앱입니다.`
+`Log Planet은 하루 중 문득 떠오른 생각과 감정을 기록하고, 시간이 지난 뒤 나의 흐름을 편지처럼 돌아볼 수 있게 돕는 앱입니다.`
 
 ### 긴 설명 후보
 
-`Log to Letter는 거창한 일기를 쓰기 어려운 사람을 위한 짧은 기록 앱입니다.`
+`Log Planet은 거창한 일기를 쓰기 어려운 사람을 위한 짧은 기록 앱입니다.`
 
 `알림이 온 순간의 생각과 감정을 솔직하게 남겨두면, 캘린더에서 그날의 에너지와 감정 흐름을 확인할 수 있습니다. 시간이 지나면 기록들이 편지처럼 정리되어, 지난 나를 조금 떨어져서 바라볼 수 있게 도와줍니다.`
 
@@ -101,28 +101,28 @@
 ## 7. 빌드 준비 명령
 
 ```bash
-cd /Users/yujinlee/Documents/Codex/2026-06-03/new-chat/outputs/log-to-letter-native
+cd /Users/yujinlee/Documents/Codex/2026-06-03/new-chat/outputs/log-planet-native
 PATH=/opt/homebrew/opt/node@22/bin:$PATH npx tsc --noEmit
 ```
 
 Preview 빌드:
 
 ```bash
-cd /Users/yujinlee/Documents/Codex/2026-06-03/new-chat/outputs/log-to-letter-native
+cd /Users/yujinlee/Documents/Codex/2026-06-03/new-chat/outputs/log-planet-native
 PATH=/opt/homebrew/opt/node@22/bin:$PATH npx eas build --profile preview --platform ios
 ```
 
 Production 빌드:
 
 ```bash
-cd /Users/yujinlee/Documents/Codex/2026-06-03/new-chat/outputs/log-to-letter-native
+cd /Users/yujinlee/Documents/Codex/2026-06-03/new-chat/outputs/log-planet-native
 PATH=/opt/homebrew/opt/node@22/bin:$PATH npx eas build --profile production --platform ios
 ```
 
 App Store 제출:
 
 ```bash
-cd /Users/yujinlee/Documents/Codex/2026-06-03/new-chat/outputs/log-to-letter-native
+cd /Users/yujinlee/Documents/Codex/2026-06-03/new-chat/outputs/log-planet-native
 PATH=/opt/homebrew/opt/node@22/bin:$PATH npx eas submit --platform ios
 ```
 

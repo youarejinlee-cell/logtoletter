@@ -1,13 +1,12 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Screen } from "../components/Screen";
-import { themePalettes } from "../lib/theme";
-import { ColorTheme, LetterPaperStyle, Mood } from "../types/domain";
+import { useAppTheme } from "../lib/theme";
+import { LetterPaperStyle, Mood } from "../types/domain";
 
 type Props = {
-  theme: ColorTheme;
   targetMoods: Mood[];
   letterPaperStyle: LetterPaperStyle;
-  onChangeTheme: (theme: ColorTheme) => void;
+  letterArchiveEnabled?: boolean;
   onChangeTargetMoods: (moods: Mood[]) => void;
   onChangeLetterPaperStyle: (style: LetterPaperStyle) => void;
 };
@@ -37,14 +36,13 @@ const letterPaperOptions: Array<{ key: LetterPaperStyle; label: string; descript
 ];
 
 export function AppSettingsScreen({
-  theme,
   targetMoods,
   letterPaperStyle,
-  onChangeTheme,
+  letterArchiveEnabled,
   onChangeTargetMoods,
   onChangeLetterPaperStyle
 }: Props) {
-  const currentTheme = themePalettes[theme];
+  const currentTheme = useAppTheme();
   const toggleTargetMood = (mood: Mood) => {
     if (targetMoods.includes(mood)) {
       onChangeTargetMoods(targetMoods.filter((item) => item !== mood));
@@ -82,56 +80,38 @@ export function AppSettingsScreen({
         </View>
       </View>
 
-      <View style={[styles.panel, { borderColor: currentTheme.border, backgroundColor: currentTheme.card }]}>
-        <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>컬러 테마</Text>
-        <View style={styles.themeGrid}>
-          {(Object.keys(themePalettes) as ColorTheme[]).map((key) => (
-            <Pressable
-              key={key}
-              style={[
-                styles.themeButton,
-                { borderColor: themePalettes[key].border, backgroundColor: themePalettes[key].soft },
-                theme === key && { borderColor: themePalettes[key].tint, borderWidth: 2 }
-              ]}
-              onPress={() => onChangeTheme(key)}
-            >
-              <View style={[styles.themeSwatch, { backgroundColor: themePalettes[key].tint, borderColor: themePalettes[key].border }]} />
-              <Text style={[styles.themeButtonText, { color: key === "black" ? "#f4f4f4" : "#18241b" }]}>{themePalettes[key].label}</Text>
-            </Pressable>
-          ))}
+      {letterArchiveEnabled ? (
+        <View style={[styles.panel, { borderColor: currentTheme.border, backgroundColor: currentTheme.card }]}>
+          <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>편지지 디자인</Text>
+          <View style={styles.letterPaperList}>
+            {letterPaperOptions.map((option) => (
+              <Pressable
+                key={option.key}
+                style={[
+                  styles.letterPaperButton,
+                  { borderColor: currentTheme.border, backgroundColor: currentTheme.cardAlt },
+                  letterPaperStyle === option.key && { borderColor: currentTheme.tint, backgroundColor: currentTheme.soft, borderWidth: 2 }
+                ]}
+                onPress={() => onChangeLetterPaperStyle(option.key)}
+              >
+                <View style={[styles.paperPreview, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }, option.key !== "plain" && { borderColor: currentTheme.tint }]}>
+                  {option.key === "clover" ? (
+                    <>
+                      <MiniClover color={currentTheme.tint} style={styles.paperCloverTop} />
+                      <MiniClover color={currentTheme.tint} style={styles.paperCloverBottom} />
+                    </>
+                  ) : null}
+                  {option.key === "cloudTitle" ? <View style={[styles.paperSplitPreview, { backgroundColor: currentTheme.soft }]} /> : null}
+                </View>
+                <View style={styles.letterPaperTextWrap}>
+                  <Text style={[styles.energyModeLabel, { color: currentTheme.text }]}>{option.label}</Text>
+                  <Text style={[styles.paperDescription, { color: currentTheme.muted }]}>{option.description}</Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
         </View>
-      </View>
-
-      <View style={[styles.panel, { borderColor: currentTheme.border, backgroundColor: currentTheme.card }]}>
-        <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>편지지 디자인</Text>
-        <View style={styles.letterPaperList}>
-          {letterPaperOptions.map((option) => (
-            <Pressable
-              key={option.key}
-              style={[
-                styles.letterPaperButton,
-                { borderColor: currentTheme.border, backgroundColor: currentTheme.cardAlt },
-                letterPaperStyle === option.key && { borderColor: currentTheme.tint, backgroundColor: currentTheme.soft, borderWidth: 2 }
-              ]}
-              onPress={() => onChangeLetterPaperStyle(option.key)}
-            >
-              <View style={[styles.paperPreview, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }, option.key !== "plain" && { borderColor: currentTheme.tint }]}>
-                {option.key === "clover" ? (
-                  <>
-                    <MiniClover color={currentTheme.tint} style={styles.paperCloverTop} />
-                    <MiniClover color={currentTheme.tint} style={styles.paperCloverBottom} />
-                  </>
-                ) : null}
-                {option.key === "cloudTitle" ? <View style={[styles.paperSplitPreview, { backgroundColor: currentTheme.soft }]} /> : null}
-              </View>
-              <View style={styles.letterPaperTextWrap}>
-                <Text style={[styles.energyModeLabel, { color: currentTheme.text }]}>{option.label}</Text>
-                <Text style={[styles.paperDescription, { color: currentTheme.muted }]}>{option.description}</Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      </View>
+      ) : null}
     </Screen>
   );
 }

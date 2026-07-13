@@ -16,8 +16,8 @@ const guideItems = [
     body: "기간과 감정을 고르면 그 감정으로 남긴 기록만 다시 모아볼 수 있어. 최신순과 오래된순으로 정렬할 수도 있어."
   },
   {
-    title: "편지보관함",
-    body: "첫 기록을 남긴 날부터 7일 뒤에 편지가 생겨. 받은 편지는 다시 바뀌지 않고, 월별 목록에서 다시 열어볼 수 있어."
+    title: "우주",
+    body: "기록이 쌓이면 카테고리별 대륙이 생기고, 한 달의 기록이 하나의 행성처럼 보여. 기록 수가 늘수록 대륙도 조금씩 개발돼."
   },
   {
     title: "알림",
@@ -25,7 +25,7 @@ const guideItems = [
   },
   {
     title: "설정",
-    body: "메뉴의 설정에서 컬러 테마와 편지지 디자인을 바꿀 수 있어."
+    body: "메뉴의 설정에서 모아보기에서 먼저 확인할 감정을 고를 수 있어."
   }
 ];
 
@@ -36,7 +36,7 @@ export function GuideScreen() {
     <Screen
       eyebrow="Guide"
       title="가이드"
-      lead="지금의 기록이 나중의 너에게 조금 더 또렷하게 도착하도록."
+      lead="지금의 기록이 쌓여 너만의 행성이 되도록."
     >
       <View style={styles.panel}>
         <Text style={styles.sectionTitle}>앱 이용 순서</Text>
@@ -56,7 +56,7 @@ export function GuideScreen() {
       <View style={[styles.noteBox, { borderColor: theme.border }]}>
         <Text style={styles.noteTitle}>처음엔 이렇게 써봐</Text>
         <Text style={styles.noteBody}>
-          알림을 켜고 하루에 몇 번씩 짧게 기록해봐. 며칠이 지나면 캘린더에서 감정과 에너지 흐름을 확인하고, 편지가 도착하면 그 주의 기록을 다시 읽어볼 수 있어.
+          알림을 켜고 하루에 몇 번씩 짧게 기록해봐. 며칠이 지나면 캘린더와 분석 보기에서 감정, 에너지, 카테고리 흐름을 확인하고, 우주 탭에서 기록이 만든 행성을 볼 수 있어.
         </Text>
       </View>
     </Screen>

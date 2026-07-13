@@ -1,6 +1,6 @@
 # AI Letter Setup
 
-Log to Letter의 주간 편지는 Supabase Edge Function `generate-letter`에서 생성한다.
+Log Planet의 주간 편지는 Supabase Edge Function `generate-letter`에서 생성한다.
 앱에는 OpenAI API 키를 넣지 않는다.
 
 ## 구조
@@ -35,7 +35,7 @@ supabase secrets set OPENAI_MODEL=gpt-4.1-mini
 프로젝트 루트에서:
 
 ```bash
-cd outputs/log-to-letter-native
+cd outputs/log-planet-native
 supabase functions deploy generate-letter
 ```
 

@@ -15,3 +15,16 @@ outputs/log-to-letter-native/.env
 outputs/log-to-letter-native/.env.local
 outputs/log-to-letter-native/src/lib/supabaseConfig.ts
 outputs/log-to-letter-native/src/lib/supabaseConfig.local.ts
+
+# Log Planet generated previews and local source backups
+outputs/log-to-letter-native/tmp/
+outputs/log-to-letter-native/assets/_*/
+outputs/log-to-letter-native/assets/*backup*
+outputs/log-to-letter-native/assets/concept_reference.png
+outputs/log-to-letter-native/assets/universe-color-version/
+outputs/log-to-letter-native/assets/universe-continent-water-ripples*.png
+outputs/log-to-letter-native/assets/universe-continent-west.png
+outputs/log-to-letter-native/assets/universe-planet-*.png
+outputs/log-to-letter-native/assets/universe-nature-version/*.before-*
+outputs/log-to-letter-native/assets/universe-nature-version/universe-continent-down-right.png
+outputs/log-to-letter-pre-planet/

@@ -31,7 +31,21 @@ const validMoods: Mood[] = [
   "anxious", "soSo", "indifferent", "curious", "accepting", "reflective", "envious", "instructive", "difficult", "worried", "tired", "sad",
   "depressed", "angry", "irritated", "jealous", "prideHurt", "sensitive", "regret", "blank", "complex"
 ];
-const validEntryCategories: EntryCategory[] = ["work", "relationships", "love", "family", "dream", "taste", "habit", "attitude", "health", "other"];
+const validEntryCategories: EntryCategory[] = [
+  "work",
+  "relationship",
+  "relationships",
+  "love",
+  "family",
+  "dream",
+  "selfDiscipline",
+  "wealth",
+  "taste",
+  "habit",
+  "attitude",
+  "health",
+  "other"
+];
 
 export function normalizeLetterPaperStyle(value: unknown): LetterPaperStyle {
   return letterPaperStyles.includes(value as LetterPaperStyle) ? (value as LetterPaperStyle) : "plain";

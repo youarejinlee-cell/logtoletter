@@ -130,11 +130,11 @@ function rgba(hex: string, alpha: number) {
 function getMoodCategoryColors(theme: AppTheme) {
   if (theme.isDark) {
     return {
-      positive: "#111111",
-      neutral: "#555555",
-      negative: "#cfcfcf",
-      selectedBackground: "rgba(17, 17, 17, 0.1)",
-      selectedBorder: "rgba(17, 17, 17, 0.32)"
+      positive: "#0b1b4d",
+      neutral: "#355ca8",
+      negative: "#a9c8ff",
+      selectedBackground: "rgba(11, 27, 77, 0.86)",
+      selectedBorder: "rgba(169, 200, 255, 0.9)"
     };
   }
 
@@ -768,6 +768,8 @@ function LegendDot({ color, label }: { color: string; label: string }) {
 
 export function CalendarScreen({ entries, energyColorMode, calendarMode, targetMoods, focusDate, onDeleteEntries, analysisOnly }: Props) {
   const theme = useAppTheme();
+  const analysisNavy = "#0b1b4d";
+  const analysisSky = "rgba(198, 229, 255, 0.92)";
   const sortedEntries = useMemo(
     () => [...entries].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     [entries]
@@ -851,7 +853,7 @@ export function CalendarScreen({ entries, energyColorMode, calendarMode, targetM
 
       {analysisOnly ? (
         <View style={[styles.analysisBox, { borderColor: theme.border, backgroundColor: theme.soft }]}>
-          <View style={[styles.analysisTabs, { backgroundColor: "#fff" }]}>
+          <View style={[styles.analysisTabs, { backgroundColor: theme.cardAlt }]}>
             {([
               ["summary", "요약"],
               ["category", "기록 카테고리 분석"],
@@ -860,10 +862,14 @@ export function CalendarScreen({ entries, energyColorMode, calendarMode, targetM
             ] as Array<[AnalysisMode, string]>).map(([key, label]) => (
               <Pressable
                 key={key}
-                style={[styles.analysisTabItem, analysisMode === key && { backgroundColor: theme.soft }]}
+                style={[
+                  styles.analysisTabItem,
+                  { backgroundColor: analysisSky },
+                  analysisMode === key && { backgroundColor: analysisNavy }
+                ]}
                 onPress={() => setAnalysisMode(key)}
               >
-                <Text style={[styles.analysisTabText, analysisMode === key && { color: theme.tint }]}>{label}</Text>
+                <Text style={[styles.analysisTabText, { color: analysisNavy }, analysisMode === key && { color: "#fff" }]}>{label}</Text>
               </Pressable>
             ))}
           </View>
@@ -996,10 +1002,12 @@ function SummaryCard({
   const theme = useAppTheme();
   const highFilter = summary.bestDate ? ({ type: "date", role: "high", date: summary.bestDate } as SummaryFilter) : null;
   const lowFilter = summary.lowestDate ? ({ type: "date", role: "low", date: summary.lowestDate } as SummaryFilter) : null;
-  const tagColor = theme.isDark ? "#111111" : categoryTint;
-  const tagBorder = theme.isDark ? "#4a4a4a" : categoryBorder;
-  const selectedTagBackground = theme.isDark ? "#111111" : categoryTint;
-  const selectedTagText = theme.isDark ? "#ffffff" : theme.inverseText;
+  const summaryNavy = "#0b1b4d";
+  const inactiveSky = "rgba(198, 229, 255, 0.92)";
+  const tagColor = summaryNavy;
+  const tagBorder = theme.isDark ? "rgba(198, 229, 255, 0.56)" : categoryBorder;
+  const selectedTagBackground = summaryNavy;
+  const selectedTagText = "#ffffff";
   const highSelected = Boolean(highFilter && sameSummaryFilter(activeFilter || null, highFilter));
   const lowSelected = Boolean(lowFilter && sameSummaryFilter(activeFilter || null, lowFilter));
 
@@ -1043,26 +1051,26 @@ function SummaryCard({
         style={[
           styles.summaryItemWide,
           styles.summaryFilterButton,
-          { borderColor: theme.border, backgroundColor: theme.cardAlt },
+          { borderColor: theme.border, backgroundColor: inactiveSky },
           highSelected && { borderColor: selectedTagBackground, backgroundColor: selectedTagBackground }
         ]}
         onPress={() => highFilter && onToggleFilter?.(highFilter)}
       >
-        <Text style={[styles.summaryLabel, { color: highSelected ? selectedTagText : theme.muted }]}>에너지를 많이 소진한 날</Text>
-        <Text style={[styles.summaryValueSmall, { color: highSelected ? selectedTagText : theme.text }]}>{summary.best}</Text>
+        <Text style={[styles.summaryLabel, { color: highSelected ? selectedTagText : summaryNavy }]}>에너지를 많이 소진한 날</Text>
+        <Text style={[styles.summaryValueSmall, { color: highSelected ? selectedTagText : summaryNavy }]}>{summary.best}</Text>
       </Pressable>
       <Pressable
         disabled={!lowFilter}
         style={[
           styles.summaryItemWide,
           styles.summaryFilterButton,
-          { borderColor: theme.border, backgroundColor: theme.cardAlt },
+          { borderColor: theme.border, backgroundColor: inactiveSky },
           lowSelected && { borderColor: selectedTagBackground, backgroundColor: selectedTagBackground }
         ]}
         onPress={() => lowFilter && onToggleFilter?.(lowFilter)}
       >
-        <Text style={[styles.summaryLabel, { color: lowSelected ? selectedTagText : theme.muted }]}>에너지를 아낀 날</Text>
-        <Text style={[styles.summaryValueSmall, { color: lowSelected ? selectedTagText : theme.text }]}>{summary.lowest}</Text>
+        <Text style={[styles.summaryLabel, { color: lowSelected ? selectedTagText : summaryNavy }]}>에너지를 아낀 날</Text>
+        <Text style={[styles.summaryValueSmall, { color: lowSelected ? selectedTagText : summaryNavy }]}>{summary.lowest}</Text>
       </Pressable>
       <View style={styles.summaryItemWide}>
         <Text style={styles.summaryLabel}>가장 많았던 감정</Text>
@@ -1915,7 +1923,7 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 10,
     borderRadius: 8,
-    backgroundColor: "#fff"
+    backgroundColor: "rgba(15, 24, 68, 0.72)"
   },
   energyMoodHeader: {
     gap: 8
@@ -1965,8 +1973,8 @@ const styles = StyleSheet.create({
     position: "relative",
     borderLeftWidth: 1,
     borderBottomWidth: 1,
-    borderColor: "#dfe8da",
-    backgroundColor: "#fbfdf8",
+    borderColor: "rgba(226, 235, 255, 0.18)",
+    backgroundColor: "rgba(159, 215, 255, 0.1)",
     borderRadius: 6,
     overflow: "hidden"
   },
@@ -1975,14 +1983,14 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 1,
-    backgroundColor: "rgba(101, 112, 100, 0.14)"
+    backgroundColor: "rgba(226, 235, 255, 0.16)"
   },
   chartGridColumn: {
     position: "absolute",
     top: 0,
     bottom: 0,
     width: 1,
-    backgroundColor: "rgba(101, 112, 100, 0.14)"
+    backgroundColor: "rgba(226, 235, 255, 0.16)"
   },
   chartRegion: {
     position: "absolute",
@@ -1997,7 +2005,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(47, 143, 84, 0.28)"
   },
   chartRegionCount: {
-    color: "rgba(101, 112, 100, 0.46)",
+    color: "rgba(226, 235, 255, 0.42)",
     fontSize: 18,
     fontWeight: "900"
   },
@@ -2010,7 +2018,7 @@ const styles = StyleSheet.create({
     marginTop: -7,
     borderRadius: 7,
     borderWidth: 2,
-    borderColor: "#fff"
+    borderColor: "rgba(255,255,255,0.92)"
   },
   chartDotSelected: {
     width: 18,
@@ -2054,10 +2062,10 @@ const styles = StyleSheet.create({
     gap: 6,
     padding: 10,
     borderRadius: 8,
-    backgroundColor: "#fbfdf8"
+    backgroundColor: "rgba(159, 215, 255, 0.13)"
   },
   chartSelectedTitle: {
-    color: "#18241b",
+    color: "#f7f9ff",
     fontSize: 13,
     fontWeight: "900"
   },
@@ -2065,7 +2073,7 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: "rgba(101, 112, 100, 0.14)"
+    borderTopColor: "rgba(226, 235, 255, 0.14)"
   },
   chartSelectedMeta: {
     flexDirection: "row",
@@ -2074,13 +2082,13 @@ const styles = StyleSheet.create({
   },
   chartSelectedMood: {
     flexShrink: 0,
-    color: "#18241b",
+    color: "#f7f9ff",
     fontSize: 12,
     fontWeight: "900"
   },
   chartSelectedTime: {
     flex: 1,
-    color: "#657064",
+    color: "rgba(226, 235, 255, 0.68)",
     fontSize: 11,
     fontWeight: "800",
     textAlign: "right"
@@ -2091,7 +2099,7 @@ const styles = StyleSheet.create({
     fontWeight: "900"
   },
   chartSelectedText: {
-    color: "#253027",
+    color: "rgba(247, 249, 255, 0.86)",
     fontSize: 13,
     lineHeight: 20,
     fontWeight: "700"
@@ -2105,8 +2113,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "#f4f7ef",
-    color: "#253027",
+    backgroundColor: "rgba(159, 215, 255, 0.14)",
+    color: "#dbeaff",
     fontSize: 11,
     fontWeight: "900",
     overflow: "hidden"

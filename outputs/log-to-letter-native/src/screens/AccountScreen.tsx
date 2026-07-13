@@ -28,7 +28,7 @@ export function AccountScreen({
   onSignOut
 }: Props) {
   const theme = useAppTheme();
-  const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split("@")[0] || "Log to Letter";
+  const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split("@")[0] || "Log Planet";
   const avatarUrl = user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
 
   return (
@@ -53,12 +53,12 @@ export function AccountScreen({
             {error ? <Text style={styles.error}>{error}</Text> : null}
             <ActionButton label="지금 동기화" color={theme.tint} onPress={onSync} />
             <ActionButton
-              label="내 기록과 편지 완전 삭제"
+              label="내 기록 완전 삭제"
               color="#d92d20"
               onPress={() => {
                 Alert.alert(
                   "내 데이터 완전 삭제",
-                  "기록, 편지, 알림 설정을 이 기기와 서버에서 삭제할게. 이 작업은 되돌릴 수 없어.",
+                  "기록과 알림 설정을 이 기기와 서버에서 삭제할게. 이 작업은 되돌릴 수 없어.",
                   [
                     { text: "아니오", style: "cancel" },
                     { text: "삭제", style: "destructive", onPress: () => void onDeleteData() }
@@ -86,7 +86,7 @@ export function AccountScreen({
           <>
             <Text style={styles.name}>계정 연결</Text>
             <Text style={styles.description}>
-              {isSupabaseConfigured ? "Google 계정으로 연결하면 기록과 편지를 서버에 동기화할 수 있어." : "Supabase 설정을 넣으면 Google 로그인을 쓸 수 있어."}
+              {isSupabaseConfigured ? "Google 계정으로 연결하면 기록을 서버에 동기화할 수 있어." : "Supabase 설정을 넣으면 Google 로그인을 쓸 수 있어."}
             </Text>
             {error ? <Text style={styles.error}>{error}</Text> : null}
             <Pressable

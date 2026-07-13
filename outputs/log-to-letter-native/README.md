@@ -1,11 +1,11 @@
-# Log to Letter Native
+# Log Planet Native
 
 Expo + React Native로 옮기는 첫 네이티브 MVP입니다.
 
 ## 실행
 
 ```bash
-cd outputs/log-to-letter-native
+cd outputs/log-planet-native
 npm install
 npm run start
 ```

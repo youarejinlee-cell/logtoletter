@@ -105,7 +105,7 @@ export async function scheduleTestLogNotification() {
 
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: "Log to Letter",
+      title: "Log Planet",
       body: "테스트 알림이야. 지금 무슨 생각하고 있어?",
       data: { screen: "capture", test: true }
     },
@@ -140,7 +140,7 @@ export async function scheduleLogNotifications(settings: NotificationSettings) {
       const minute = minuteOfDay % 60;
       return Notifications.scheduleNotificationAsync({
         content: {
-          title: "Log to Letter",
+          title: "Log Planet",
           body: "지금 무슨 생각하고 있어?",
           data: { screen: "capture" }
         },
@@ -158,7 +158,7 @@ export async function scheduleLogNotifications(settings: NotificationSettings) {
       const minute = minuteOfDay % 60;
       return Notifications.scheduleNotificationAsync({
         content: {
-          title: "Log to Letter",
+          title: "Log Planet",
           body: "지금 무슨 생각하고 있어?",
           data: { screen: "capture" }
         },

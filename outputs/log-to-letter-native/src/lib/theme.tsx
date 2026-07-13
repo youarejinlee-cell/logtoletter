@@ -24,6 +24,20 @@ export const themePalettes: Record<ColorTheme, AppTheme> = {
   black: { label: "검정", tint: "#f5f5f5", soft: "#292929", page: "#101010", border: "#3a3a3a", card: "#181818", cardAlt: "#222222", text: "#f4f4f4", muted: "#b6b6b6", inverseText: "#111111", isDark: true }
 };
 
+export const cosmicTheme: AppTheme = {
+  label: "우주",
+  tint: "#9fd7ff",
+  soft: "rgba(157, 215, 255, 0.16)",
+  page: "#070d2a",
+  border: "rgba(226, 235, 255, 0.18)",
+  card: "rgba(15, 24, 68, 0.88)",
+  cardAlt: "rgba(22, 33, 82, 0.86)",
+  text: "#f7f9ff",
+  muted: "rgba(226, 235, 255, 0.72)",
+  inverseText: "#08112f",
+  isDark: true
+};
+
 const ThemeContext = createContext<AppTheme>(themePalettes.green);
 
 export function AppThemeProvider({ theme, children }: PropsWithChildren<{ theme: AppTheme }>) {
