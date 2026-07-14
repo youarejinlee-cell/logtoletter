@@ -1,0 +1,278 @@
+:root {
+  color-scheme: light;
+  --navy: #07122f;
+  --navy-soft: #142448;
+  --sky: #d8eff7;
+  --green: #98ad28;
+  --paper: #ffffff;
+  --mist: #f3f7f8;
+  --ink: #162033;
+  --muted: #586578;
+  --line: #d8e0e6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Apple SD Gothic Neo",
+    "Pretendard",
+    "Noto Sans KR",
+    "Segoe UI",
+    sans-serif;
+  line-height: 1.7;
+}
+
+a {
+  color: inherit;
+}
+
+.site-nav {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  left: 0;
+  display: flex;
+  width: 100%;
+  min-height: 68px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 5vw;
+  color: var(--paper);
+}
+
+.brand {
+  font-size: 18px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.nav-links {
+  display: flex;
+  gap: 24px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.nav-links a {
+  text-decoration: none;
+}
+
+.hero {
+  position: relative;
+  display: flex;
+  min-height: min(720px, 78svh);
+  align-items: flex-end;
+  overflow: hidden;
+  background-color: var(--navy);
+  background-image: url("./outputs/log-to-letter-native/assets/assets_v4/app-logo/logo_v1.png");
+  background-position: center;
+  background-size: cover;
+  color: var(--paper);
+}
+
+.hero-shade {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 8, 27, 0.38);
+}
+
+.hero-content {
+  position: relative;
+  z-index: 1;
+  width: min(1120px, 90vw);
+  margin: 0 auto;
+  padding: 112px 0 64px;
+}
+
+.eyebrow,
+.section-label {
+  margin: 0 0 10px;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(48px, 9vw, 104px);
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.hero-content > p:last-child {
+  max-width: 620px;
+  margin: 24px 0 0;
+  font-size: clamp(17px, 2.2vw, 23px);
+  font-weight: 650;
+}
+
+.band {
+  border-bottom: 1px solid var(--line);
+  padding: 88px 0;
+}
+
+.band-alt {
+  background: var(--mist);
+}
+
+.policy-band {
+  background: var(--sky);
+}
+
+.content {
+  width: min(1120px, 90vw);
+  margin: 0 auto;
+}
+
+.two-column,
+.policy-links {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 8vw;
+}
+
+h2 {
+  margin: 0;
+  color: var(--navy);
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.body-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 17px;
+}
+
+.body-copy p + p {
+  margin-top: 18px;
+}
+
+.policy-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 16px;
+}
+
+.text-link {
+  color: var(--navy);
+  font-size: 18px;
+  font-weight: 800;
+  text-underline-offset: 5px;
+}
+
+.site-footer {
+  display: flex;
+  min-height: 96px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 5vw;
+  background: var(--navy);
+  color: var(--sky);
+  font-size: 14px;
+}
+
+.legal-page {
+  background: var(--mist);
+}
+
+.legal-nav {
+  position: static;
+  background: var(--navy);
+}
+
+.legal-main {
+  width: min(880px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 56px 0 72px;
+}
+
+.legal-header {
+  padding-bottom: 32px;
+  border-bottom: 2px solid var(--navy);
+}
+
+.legal-header h1 {
+  margin: 0 0 12px;
+  color: var(--navy);
+  font-size: clamp(34px, 6vw, 54px);
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.effective-date {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.legal-section {
+  padding: 30px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.legal-section h2 {
+  margin-bottom: 14px;
+  font-size: 22px;
+}
+
+.legal-section p,
+.legal-section ul {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 720px) {
+  .site-nav {
+    align-items: flex-start;
+    padding-top: 18px;
+  }
+
+  .nav-links {
+    max-width: 220px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px 16px;
+  }
+
+  .hero {
+    min-height: 72svh;
+  }
+
+  .hero-content {
+    padding-bottom: 44px;
+  }
+
+  .band {
+    padding: 60px 0;
+  }
+
+  .two-column,
+  .policy-links {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .site-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    justify-content: center;
+    gap: 6px;
+  }
+}
