@@ -132,9 +132,38 @@
       a {
         color: var(--accent);
       }
+
+      nav {
+        display: flex;
+        min-height: 64px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 max(16px, calc((100% - 880px) / 2));
+        background: #07122f;
+        color: #ffffff;
+      }
+
+      nav a {
+        color: inherit;
+        font-size: 14px;
+        font-weight: 800;
+        text-decoration: none;
+      }
+
+      .nav-links {
+        display: flex;
+        gap: 20px;
+      }
     </style>
   </head>
   <body>
+    <nav aria-label="주요 메뉴">
+      <a href="./">Log Planet</a>
+      <div class="nav-links">
+        <a href="./">앱 소개</a>
+        <a href="./terms.html">이용약관</a>
+      </div>
+    </nav>
     <main>
       <header>
         <p class="eyebrow">Log Planet</p>
@@ -284,7 +313,7 @@
         <ul>
           <li>운영자: 이유진</li>
           <li>이메일: <a href="mailto:logtoletter@gmail.com">logtoletter@gmail.com</a></li>
-          <li>웹사이트: <a href="https://youarejinlee-cell.github.io/logtoletter/privacy.html">https://youarejinlee-cell.github.io/logtoletter/privacy.html</a></li>
+          <li>웹사이트: <a href="./">Log Planet 앱 소개</a></li>
         </ul>
       </section>
 
