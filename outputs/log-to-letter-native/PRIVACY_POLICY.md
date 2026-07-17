@@ -125,7 +125,7 @@ AI 기능이 도입되는 경우, 아래 사항을 별도로 고지하고 개인
 
 계정 삭제 또는 데이터 삭제 기능이 정상적으로 동작하지 않는 경우, 아래 연락처로 문의할 수 있습니다.
 
-문의처: `logtoletter@gmail.com`
+문의처: `you.are.jinlee@gmail.com`
 
 ## 9. 보안
 
@@ -152,5 +152,5 @@ AI 기능이 도입되는 경우, 아래 사항을 별도로 고지하고 개인
 개인정보와 관련한 문의는 아래 연락처로 보낼 수 있습니다.
 
 - 운영자: `이유진`
-- 이메일: `logtoletter@gmail.com`
+- 이메일: `you.are.jinlee@gmail.com`
 - 웹사이트: `https://youarejinlee-cell.github.io/logtoletter/privacy.html`
