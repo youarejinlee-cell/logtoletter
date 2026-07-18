@@ -21,9 +21,20 @@ outputs/log-to-letter-native/tmp/
 outputs/log-to-letter-native/*.log
 outputs/log-to-letter-native/.env
 outputs/log-to-letter-native/.env.local
-outputs/log-to-letter-native/assets/universe_continent_v3/
-outputs/log-to-letter-native/assets/universe-color-version/
-outputs/log-to-letter-native/assets/universe-nature-version/
-outputs/log-to-letter-native/assets/_continent_edge_backups/
-outputs/log-to-letter-native/assets/_incoming_continent_originals/
-outputs/log-to-letter-native/assets/_incoming_continent_transparent_originals/
+outputs/log-to-letter-native/assets/universe_continent_v3/**
+outputs/log-to-letter-native/assets/universe-color-version/**
+outputs/log-to-letter-native/assets/universe-nature-version/**
+outputs/log-to-letter-native/assets/_continent_edge_backups/**
+outputs/log-to-letter-native/assets/_incoming_continent_originals/**
+outputs/log-to-letter-native/assets/_incoming_continent_transparent_originals/**
+outputs/log-to-letter-native/assets/universe-planet-*
+outputs/log-to-letter-native/assets/universe-continent-*
+outputs/log-to-letter-native/assets/concept_reference.png
+outputs/log-to-letter-native/assets/splash-log-to-letter-backup.png
+outputs/log-to-letter-native/assets/app-icon-log-to-letter-backup.png
+outputs/log-to-letter-native/assets/app-icon 오후 2.52.31.png
+outputs/log-to-letter-native/assets/icon.png
+outputs/log-to-letter-native/assets/letter-envelope-base.png
+outputs/log-to-letter-native/assets/letter-archive-icon.png
+outputs/log-to-letter-native/assets/letter-archive-icon-compact.png
+outputs/log-to-letter-native/bgm/*.band/**

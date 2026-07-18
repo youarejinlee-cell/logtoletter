@@ -1,5 +1,7 @@
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 import { User } from "@supabase/supabase-js";
+import { AppleLoginButton } from "./AppleLoginButton";
+import { GoogleLoginButton, KakaoLoginButton } from "./KakaoLoginButton";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { useAppTheme } from "../lib/theme";
 
@@ -7,10 +9,12 @@ type Props = {
   user: User | null;
   loading?: boolean;
   error?: string | null;
+  onAppleLogin: () => void;
   onGoogleLogin: () => void;
+  onKakaoLogin: () => void;
 };
 
-export function AuthCard({ user, loading, error, onGoogleLogin }: Props) {
+export function AuthCard({ user, loading, error, onAppleLogin, onGoogleLogin, onKakaoLogin }: Props) {
   const theme = useAppTheme();
   const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split("@")[0] || "Log Planet";
   const avatarUrl = user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
@@ -35,16 +39,12 @@ export function AuthCard({ user, loading, error, onGoogleLogin }: Props) {
           <Text style={[styles.label, { color: theme.muted }]}>계정</Text>
           <Text style={[styles.title, { color: theme.text }]}>계정 연결</Text>
           <Text style={[styles.text, { color: theme.muted }]}>
-            {isSupabaseConfigured ? "Google 계정으로 연결할 수 있어." : "Supabase 설정을 넣으면 Google 로그인을 쓸 수 있어."}
+            {isSupabaseConfigured ? "Apple, 카카오 또는 Google 계정으로 연결할 수 있어." : "Supabase 설정을 넣으면 계정 로그인을 쓸 수 있어."}
           </Text>
           {error ? <Text style={styles.error}>{error}</Text> : null}
-          <Pressable
-            disabled={!isSupabaseConfigured || loading}
-            style={[styles.button, { backgroundColor: theme.tint }, (!isSupabaseConfigured || loading) && styles.disabled]}
-            onPress={onGoogleLogin}
-          >
-            <Text style={[styles.buttonLabel, { color: theme.inverseText }]}>{loading ? "연결 중" : "Google로 계속하기"}</Text>
-          </Pressable>
+          <AppleLoginButton loading={loading} onPress={onAppleLogin} />
+          <KakaoLoginButton loading={loading} onPress={onKakaoLogin} />
+          <GoogleLoginButton loading={loading} onPress={onGoogleLogin} />
         </>
       )}
     </View>
@@ -104,18 +104,4 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800"
   },
-  button: {
-    alignItems: "center",
-    marginTop: 4,
-    paddingVertical: 12,
-    borderRadius: 8,
-    backgroundColor: "#18241b"
-  },
-  disabled: {
-    opacity: 0.45
-  },
-  buttonLabel: {
-    color: "#fff",
-    fontWeight: "900"
-  }
 });

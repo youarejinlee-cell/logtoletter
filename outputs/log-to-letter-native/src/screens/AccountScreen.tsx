@@ -1,5 +1,7 @@
 import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { User } from "@supabase/supabase-js";
+import { AppleLoginButton } from "../components/AppleLoginButton";
+import { GoogleLoginButton, KakaoLoginButton } from "../components/KakaoLoginButton";
 import { Screen } from "../components/Screen";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { useAppTheme } from "../lib/theme";
@@ -9,7 +11,9 @@ type Props = {
   loading?: boolean;
   error?: string | null;
   syncStatus?: string | null;
+  onAppleLogin: () => void;
   onGoogleLogin: () => void;
+  onKakaoLogin: () => void;
   onSync: () => void;
   onDeleteData: () => Promise<void> | void;
   onDeleteAccount: () => Promise<void> | void;
@@ -21,7 +25,9 @@ export function AccountScreen({
   loading,
   error,
   syncStatus,
+  onAppleLogin,
   onGoogleLogin,
+  onKakaoLogin,
   onSync,
   onDeleteData,
   onDeleteAccount,
@@ -46,7 +52,7 @@ export function AccountScreen({
               )}
               <View style={styles.profileText}>
                 <Text style={styles.name}>{displayName}</Text>
-                <Text style={styles.email}>{user.email || "Google 계정"}</Text>
+                <Text style={styles.email}>{user.email || "연결된 계정"}</Text>
               </View>
             </View>
             {syncStatus ? <Text style={styles.status}>서버 동기화: {syncStatus}</Text> : null}
@@ -86,16 +92,12 @@ export function AccountScreen({
           <>
             <Text style={styles.name}>계정 연결</Text>
             <Text style={styles.description}>
-              {isSupabaseConfigured ? "Google 계정으로 연결하면 기록을 서버에 동기화할 수 있어." : "Supabase 설정을 넣으면 Google 로그인을 쓸 수 있어."}
+              {isSupabaseConfigured ? "Apple, 카카오 또는 Google 계정으로 연결하면 기록을 서버에 동기화할 수 있어." : "Supabase 설정을 넣으면 계정 로그인을 쓸 수 있어."}
             </Text>
             {error ? <Text style={styles.error}>{error}</Text> : null}
-            <Pressable
-              disabled={!isSupabaseConfigured || loading}
-              style={[styles.loginButton, { backgroundColor: theme.tint }, (!isSupabaseConfigured || loading) && styles.disabledButton]}
-              onPress={onGoogleLogin}
-            >
-              <Text style={styles.loginButtonText}>{loading ? "연결 중" : "Google로 계속하기"}</Text>
-            </Pressable>
+            <AppleLoginButton loading={loading} onPress={onAppleLogin} />
+            <KakaoLoginButton loading={loading} onPress={onKakaoLogin} />
+            <GoogleLoginButton loading={loading} onPress={onGoogleLogin} />
           </>
         )}
       </View>
@@ -178,16 +180,4 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900"
   },
-  loginButton: {
-    alignItems: "center",
-    paddingVertical: 13,
-    borderRadius: 8
-  },
-  disabledButton: {
-    opacity: 0.45
-  },
-  loginButtonText: {
-    color: "#fff",
-    fontWeight: "900"
-  }
 });

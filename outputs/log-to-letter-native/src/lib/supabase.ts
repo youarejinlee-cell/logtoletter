@@ -1,8 +1,11 @@
 import "react-native-url-polyfill/auto";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient, Session } from "@supabase/supabase-js";
+import * as AppleAuthentication from "expo-apple-authentication";
 import * as AuthSession from "expo-auth-session";
+import * as Crypto from "expo-crypto";
 import * as WebBrowser from "expo-web-browser";
+import { Platform } from "react-native";
 import { appScheme } from "./appVariant";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./supabaseConfig";
 
@@ -38,7 +41,7 @@ export function getStandaloneRedirectUri() {
   });
 }
 
-export function getGoogleRedirectUri() {
+export function getOAuthRedirectUri() {
   return `${appScheme}://auth/callback`;
 }
 
@@ -60,14 +63,14 @@ export async function getCurrentSession(): Promise<Session | null> {
   return data.session;
 }
 
-export async function signInWithGoogle(): Promise<Session | null> {
+async function signInWithOAuthProvider(provider: "google" | "kakao", providerLabel: string): Promise<Session | null> {
   if (!isSupabaseConfigured) {
     throw new Error("Supabase 설정이 필요해.");
   }
 
-  const redirectTo = getGoogleRedirectUri();
+  const redirectTo = getOAuthRedirectUri();
   const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
+    provider,
     options: {
       redirectTo,
       skipBrowserRedirect: true
@@ -75,7 +78,7 @@ export async function signInWithGoogle(): Promise<Session | null> {
   });
 
   if (error) throw error;
-  if (!data.url) throw new Error("Google 로그인 URL을 만들지 못했어.");
+  if (!data.url) throw new Error(`${providerLabel} 로그인 URL을 만들지 못했어.`);
 
   const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
   if (result.type !== "success") return null;
@@ -97,6 +100,68 @@ export async function signInWithGoogle(): Promise<Session | null> {
   });
   if (sessionError) throw sessionError;
   return sessionData.session;
+}
+
+export function signInWithGoogle(): Promise<Session | null> {
+  return signInWithOAuthProvider("google", "Google");
+}
+
+export function signInWithKakao(): Promise<Session | null> {
+  return signInWithOAuthProvider("kakao", "카카오");
+}
+
+export async function signInWithApple(): Promise<Session | null> {
+  if (!isSupabaseConfigured) {
+    throw new Error("Supabase 설정이 필요해.");
+  }
+  if (Platform.OS !== "ios" || !(await AppleAuthentication.isAvailableAsync())) {
+    throw new Error("이 기기에서는 Apple 로그인을 사용할 수 없어.");
+  }
+
+  try {
+    const rawNonce = Crypto.randomUUID();
+    const hashedNonce = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, rawNonce);
+    const credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL
+      ],
+      nonce: hashedNonce
+    });
+
+    if (!credential.identityToken) {
+      throw new Error("Apple 로그인 토큰을 받지 못했어.");
+    }
+
+    const { data, error } = await supabase.auth.signInWithIdToken({
+      provider: "apple",
+      token: credential.identityToken,
+      nonce: rawNonce
+    });
+    if (error) throw error;
+
+    const givenName = credential.fullName?.givenName || null;
+    const familyName = credential.fullName?.familyName || null;
+    const fullName = [givenName, familyName].filter(Boolean).join(" ");
+    if (fullName) {
+      const { error: updateError } = await supabase.auth.updateUser({
+        data: {
+          full_name: fullName,
+          given_name: givenName,
+          family_name: familyName
+        }
+      });
+      if (updateError) throw updateError;
+      return getCurrentSession();
+    }
+
+    return data.session;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ERR_REQUEST_CANCELED") {
+      return null;
+    }
+    throw error;
+  }
 }
 
 export async function signOut() {

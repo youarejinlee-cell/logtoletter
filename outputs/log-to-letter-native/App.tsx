@@ -3,8 +3,10 @@ import { Alert, Modal, Platform, Pressable, StatusBar as NativeStatusBar, StyleS
 import { StatusBar } from "expo-status-bar";
 import * as Notifications from "expo-notifications";
 import * as SplashScreen from "expo-splash-screen";
-import { User } from "@supabase/supabase-js";
+import { Session, User } from "@supabase/supabase-js";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AppleLoginButton } from "./src/components/AppleLoginButton";
+import { GoogleLoginButton, KakaoLoginButton } from "./src/components/KakaoLoginButton";
 import { AuthCard } from "./src/components/AuthCard";
 import { BottomTabs, TabKey } from "./src/components/BottomTabs";
 import { FirstRunGuideModal } from "./src/components/FirstRunGuideModal";
@@ -29,7 +31,7 @@ import {
 } from "./src/lib/notifications";
 import { deleteRemoteEntries, deleteRemoteUserData, generateDueLetters, normalizeStateIds, pullAppState, syncAppState, upsertEntry, upsertRemoteSettings } from "./src/lib/remoteSync";
 import { claimGuestStorageNotice, completeFirstRunGuide, defaultState, hasCompletedFirstRunGuide, loadAppState, removeAppState, saveAppState } from "./src/lib/storage";
-import { deleteAccount, getCurrentSession, signInWithGoogle, signOut, supabase } from "./src/lib/supabase";
+import { deleteAccount, getCurrentSession, signInWithApple, signInWithGoogle, signInWithKakao, signOut, supabase } from "./src/lib/supabase";
 import { AppThemeProvider, cosmicTheme } from "./src/lib/theme";
 import { AppState, Entry, Letter, Mood } from "./src/types/domain";
 
@@ -455,6 +457,7 @@ export default function App() {
   const [calendarFocusDate, setCalendarFocusDate] = useState<string | undefined>();
   const [hydrated, setHydrated] = useState(false);
   const [storageUserId, setStorageUserId] = useState<string | null | undefined>(undefined);
+  const [authChoiceVisible, setAuthChoiceVisible] = useState(false);
   const [guestBrowsePromptVisible, setGuestBrowsePromptVisible] = useState(false);
   const [firstRunGuideVisible, setFirstRunGuideVisible] = useState(false);
   const [firstRunGuideResolved, setFirstRunGuideResolved] = useState(false);
@@ -627,7 +630,7 @@ export default function App() {
             "로그인하지 않은 기록은 앱을 삭제하거나 기기를 바꾸면 복구할 수 없어. 로그인하면 안전하게 보관하고 행성으로 불러올 수 있어.",
             [
               { text: "나중에", style: "cancel" },
-              { text: "로그인", onPress: () => void handleGoogleLogin() }
+              { text: "로그인", onPress: () => setAuthChoiceVisible(true) }
             ]
           );
         })
@@ -705,13 +708,14 @@ export default function App() {
     }
   };
 
-  const handleGoogleLogin = async () => {
+  const handleProviderLogin = async (signIn: () => Promise<Session | null>) => {
     setAuthLoading(true);
     setAuthError(null);
     loginInProgressRef.current = true;
     try {
-      const session = await signInWithGoogle();
+      const session = await signIn();
       if (session?.user) {
+        setAuthChoiceVisible(false);
         const guestState = await loadAppState(null);
         const shouldImport = guestState.entries.length
           ? await confirmGuestEntryImport(guestState.entries.length)
@@ -747,6 +751,10 @@ export default function App() {
       setAuthLoading(false);
     }
   };
+
+  const handleGoogleLogin = () => handleProviderLogin(signInWithGoogle);
+  const handleAppleLogin = () => handleProviderLogin(signInWithApple);
+  const handleKakaoLogin = () => handleProviderLogin(signInWithKakao);
 
   const handleSignOut = async () => {
     await signOut();
@@ -929,7 +937,7 @@ export default function App() {
         guestEntryCount={user ? 0 : state.entries.length}
         isLoggedIn={Boolean(user)}
         loginLoading={authLoading}
-        onLogin={handleGoogleLogin}
+        onLogin={() => setAuthChoiceVisible(true)}
       />
     ),
     capture: <CaptureScreen onAddEntry={addEntry} getNow={() => nowForState(state)} energyColorMode={state.energyColorMode} />,
@@ -1010,7 +1018,9 @@ export default function App() {
         loading={authLoading}
         error={authError}
         syncStatus={syncStatus}
+        onAppleLogin={handleAppleLogin}
         onGoogleLogin={handleGoogleLogin}
+        onKakaoLogin={handleKakaoLogin}
         onSync={() => runFullSync()}
         onDeleteData={handleDeleteUserData}
         onDeleteAccount={handleDeleteAccount}
@@ -1086,7 +1096,9 @@ export default function App() {
                 user={user}
                 loading={authLoading}
                 error={authError}
+                onAppleLogin={handleAppleLogin}
                 onGoogleLogin={handleGoogleLogin}
+                onKakaoLogin={handleKakaoLogin}
               />
               <Pressable
                 style={[styles.menuListItem, { borderTopColor: theme.border, backgroundColor: theme.card }]}
@@ -1150,7 +1162,7 @@ export default function App() {
                 style={[styles.guestBrowsePrimaryButton, authLoading && styles.guestBrowseButtonDisabled]}
                 onPress={() => {
                   setGuestBrowsePromptVisible(false);
-                  void handleGoogleLogin();
+                  setAuthChoiceVisible(true);
                 }}
               >
                 <Text style={styles.guestBrowsePrimaryText}>{authLoading ? "로그인 중" : "로그인 하러 가기"}</Text>
@@ -1163,6 +1175,28 @@ export default function App() {
               </Pressable>
             </View>
           </View>
+        </Modal>
+        <Modal
+          transparent
+          animationType="fade"
+          visible={authChoiceVisible && !user}
+          onRequestClose={() => setAuthChoiceVisible(false)}
+        >
+          <Pressable style={styles.authChoiceBackdrop} onPress={() => setAuthChoiceVisible(false)}>
+            <Pressable style={styles.authChoiceModal} onPress={(event) => event.stopPropagation()}>
+              <View style={styles.authChoiceHeader}>
+                <Text style={styles.authChoiceTitle}>로그인 방법 선택</Text>
+                <Pressable style={styles.authChoiceClose} onPress={() => setAuthChoiceVisible(false)}>
+                  <Text style={styles.authChoiceCloseText}>×</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.authChoiceDescription}>계정을 연결하면 기록을 안전하게 보관하고 행성으로 불러올 수 있어.</Text>
+              {authError ? <Text style={styles.authChoiceError}>{authError}</Text> : null}
+              <AppleLoginButton loading={authLoading} onPress={handleAppleLogin} />
+              <KakaoLoginButton loading={authLoading} onPress={handleKakaoLogin} />
+              <GoogleLoginButton loading={authLoading} onPress={handleGoogleLogin} />
+            </Pressable>
+          </Pressable>
         </Modal>
         </View>
       </AppThemeProvider>
@@ -1229,6 +1263,57 @@ const styles = StyleSheet.create({
   },
   guestBrowseButtonDisabled: {
     opacity: 0.5
+  },
+  authChoiceBackdrop: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    backgroundColor: "rgba(3, 7, 24, 0.76)"
+  },
+  authChoiceModal: {
+    width: "100%",
+    maxWidth: 340,
+    gap: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "rgba(191, 224, 255, 0.34)",
+    borderRadius: 8,
+    backgroundColor: "#0b1b4d"
+  },
+  authChoiceHeader: {
+    minHeight: 32,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  authChoiceTitle: {
+    color: "#fff",
+    fontSize: 19,
+    fontWeight: "900"
+  },
+  authChoiceClose: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  authChoiceCloseText: {
+    color: "#d8ebff",
+    fontSize: 24,
+    fontWeight: "900"
+  },
+  authChoiceDescription: {
+    color: "rgba(216, 235, 255, 0.78)",
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "700"
+  },
+  authChoiceError: {
+    color: "#ffb4ab",
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "800"
   },
   header: {
     flexDirection: "row",

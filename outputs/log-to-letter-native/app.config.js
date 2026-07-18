@@ -38,6 +38,7 @@ module.exports = {
     },
     ios: {
       supportsTablet: false,
+      usesAppleSignIn: true,
       buildNumber: "1",
       bundleIdentifier: identity.iosBundleIdentifier,
       infoPlist: {
@@ -66,6 +67,7 @@ module.exports = {
     },
     plugins: [
       ...(appVariant === "development" ? ["expo-dev-client"] : []),
+      "expo-apple-authentication",
       [
         "expo-audio",
         {

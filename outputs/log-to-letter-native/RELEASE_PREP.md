@@ -17,7 +17,7 @@
 - iOS build number: `1` (`production` 빌드에서 자동 증가)
 - Android version code: `1`
 - 초기 타깃: iPhone 전용
-- 로그인: Google OAuth via Supabase
+- 로그인: Apple 네이티브 인증 및 카카오·Google OAuth via Supabase
 - 데이터 저장: 비로그인 시 기기 로컬 저장, 로그인 시 Supabase 동기화
 - 주요 탭: 기록, 모아보기, 행성, 분석 보기, 알림
 - 행성 생성: 월별 기록의 카테고리, 개수, 감정 비율을 에셋 구성에 반영
@@ -33,6 +33,9 @@
 - [x] 개발 앱 식별자를 `com.youarejinlee.logplanet.dev`로 설정했다.
 - [x] 앱 아이콘을 `logo_v2.png`로 적용했다.
 - [x] Google OAuth용 앱 스킴을 운영 환경에서 `logplanet`으로 설정했다.
+- [x] Apple 로그인 UI, 네이티브 capability와 Supabase ID token 인증을 구현했다.
+- [x] 카카오 로그인 UI와 Supabase OAuth 앱 복귀 흐름을 구현했다.
+- [x] Kakao Developers 앱과 Supabase Kakao provider를 설정했다.
 - [x] Supabase 로그인과 기록 동기화가 동작한다.
 - [x] 비로그인 기록을 로그인 계정으로 가져오는 선택 기능이 있다.
 - [x] 비로그인 상태의 기록은 행성에 반영하지 않는다.
@@ -59,8 +62,10 @@
 - [x] 운영 앱 이름이 `Log Planet`으로 설정되어 있다.
 - [x] 운영 URL 스킴이 `logplanet://auth/callback`을 사용한다.
 - [x] 개발 빌드에서 Google 로그인과 기록 동기화를 확인했다.
+- [ ] 실제 iPhone 운영 빌드에서 Apple 로그인과 기록 동기화를 확인한다.
 - [ ] Preview 빌드에서 Google 로그인을 확인한다.
 - [ ] Production 또는 TestFlight 빌드에서 Google 로그인을 확인한다.
+- [ ] Production 또는 TestFlight 빌드에서 카카오 로그인을 확인한다.
 - [ ] Supabase Redirect URLs에 운영 콜백 주소가 등록되어 있는지 최종 확인한다.
 - [ ] Google Auth Platform의 승인된 도메인과 개인정보처리방침 URL을 최종 확인한다.
 - [ ] Supabase RLS가 다른 사용자 데이터 접근을 차단하는지 별도 계정으로 확인한다.
@@ -148,7 +153,7 @@
 - 카테고리 개수·비율과 감정 비율 분석
 - 월별 메모 저장과 수정
 - 원하는 시간에 기록 알림 설정
-- Google 로그인 기반 기록 동기화
+- Apple·카카오·Google 로그인 기반 기록 동기화
 - 완성된 월별 행성 이미지 저장
 
 ### 키워드 후보
@@ -161,7 +166,7 @@
 - [ ] 프로모션 문구와 상세 설명을 확정한다.
 - [ ] 앱 카테고리와 연령 등급을 확정한다.
 - [ ] 광고, 결제, 구독이 없다는 설명이 실제 앱과 일치하는지 확인한다.
-- [ ] 심사 메모에 비로그인 사용법과 Google 로그인 테스트 방법을 작성한다.
+- [ ] 심사 메모에 비로그인 사용법과 Apple·카카오·Google 로그인 테스트 방법을 작성한다.
 
 ## 8. 스크린샷 구성
 
@@ -213,7 +218,7 @@ npx eas-cli submit --platform ios
 2. TypeScript 검사와 Expo 설정 검사를 실행한다.
 3. iOS 시뮬레이터에서 비로그인·로그인 QA를 수행한다.
 4. 고객지원 페이지를 만들고 공개 URL을 등록한다.
-5. Preview 빌드를 실제 iPhone에 설치해 Google 로그인과 권한을 확인한다.
+5. Preview 빌드를 실제 iPhone에 설치해 Apple·카카오·Google 로그인과 권한을 확인한다.
 6. Production 빌드를 만들고 TestFlight에 업로드한다.
 7. TestFlight에서 계정 삭제, 재설치 복구, 네트워크 단절을 포함한 QA를 수행한다.
 8. 스토어 설명, 개인정보 라벨, 스크린샷을 확정한다.
@@ -224,6 +229,7 @@ npx eas-cli submit --platform ios
 아래 항목은 해결 또는 확인 전에는 심사 제출하지 않는다.
 
 - [ ] Production 빌드에서 Google 로그인이 정상 동작한다.
+- [ ] Production 빌드에서 카카오 로그인이 정상 동작한다.
 - [ ] 계정 삭제 시 인증 계정과 서버 데이터가 실제로 삭제된다.
 - [ ] 사용자별 Supabase RLS 분리가 검증되었다.
 - [ ] 개인정보처리방침과 별도 고객지원 URL이 공개되어 있다.
