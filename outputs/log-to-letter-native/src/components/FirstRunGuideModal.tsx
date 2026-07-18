@@ -58,13 +58,12 @@ export function FirstRunGuideModal({ visible, onClose }: Props) {
               </View>
             </View>
           ))}
+          <View style={styles.footer}>
+            <Pressable style={styles.startButton} onPress={onClose}>
+              <Text style={styles.startButtonText}>시작하기</Text>
+            </Pressable>
+          </View>
         </ScrollView>
-
-        <View style={styles.footer}>
-          <Pressable style={styles.startButton} onPress={onClose}>
-            <Text style={styles.startButtonText}>시작하기</Text>
-          </Pressable>
-        </View>
       </SafeAreaView>
     </Modal>
   );
@@ -163,12 +162,7 @@ const styles = StyleSheet.create({
     fontWeight: "700"
   },
   footer: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 10,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(191, 224, 255, 0.16)",
-    backgroundColor: "#070d2a"
+    marginTop: 10
   },
   startButton: {
     minHeight: 50,

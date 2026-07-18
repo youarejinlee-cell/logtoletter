@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Keyboard, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { Screen } from "../components/Screen";
 import { useAppTheme } from "../lib/theme";
 import { NotificationSettings } from "../types/domain";
@@ -21,6 +21,9 @@ const intervalOptions = Array.from(
   { length: (MAX_INTERVAL_MINUTES - MIN_INTERVAL_MINUTES) / INTERVAL_STEP_MINUTES + 1 },
   (_, index) => MIN_INTERVAL_MINUTES + index * INTERVAL_STEP_MINUTES
 );
+const hourOptions = Array.from({ length: 24 }, (_, index) => index);
+const minuteOptions = Array.from({ length: 60 }, (_, index) => index);
+const TIME_WHEEL_ITEM_HEIGHT = 42;
 
 type Props = {
   settings: NotificationSettings;
@@ -96,12 +99,14 @@ export function SettingsScreen({ settings, onChange, onSave }: Props) {
   };
 
   const summary = getNotificationSummary(settings);
+  const draftSummary = getNotificationSummary(draftSettings);
 
   return (
     <Screen
       eyebrow="NOTIFICATION"
       title="기록 알림 설정"
       lead="순간의 생각을 기록할 수 있도록 앱 푸시를 보내줄게."
+      dismissKeyboardOnTouchOutside
     >
       <View style={styles.panel}>
         <View style={styles.sectionHeader}>
@@ -150,13 +155,19 @@ export function SettingsScreen({ settings, onChange, onSave }: Props) {
             <View style={[styles.modeSwitch, { backgroundColor: theme.soft }]}>
               <Pressable
                 style={[styles.modeButton, draftSettings.scheduleMode !== "fixed" && { backgroundColor: theme.tint }]}
-                onPress={() => setDraftSettings({ ...draftSettings, scheduleMode: "interval" })}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setDraftSettings({ ...draftSettings, scheduleMode: "interval" });
+                }}
               >
                 <Text style={[styles.modeText, draftSettings.scheduleMode !== "fixed" && styles.modeTextActive]}>간격 반복</Text>
               </Pressable>
               <Pressable
                 style={[styles.modeButton, draftSettings.scheduleMode === "fixed" && { backgroundColor: theme.tint }]}
-                onPress={() => setDraftSettings({ ...draftSettings, scheduleMode: "fixed" })}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setDraftSettings({ ...draftSettings, scheduleMode: "fixed" });
+                }}
               >
                 <Text style={[styles.modeText, draftSettings.scheduleMode === "fixed" && styles.modeTextActive]}>특정 시간</Text>
               </Pressable>
@@ -195,35 +206,41 @@ export function SettingsScreen({ settings, onChange, onSave }: Props) {
                   </Pressable>
                 </View>
                 {draftSettings.fixedTimes.map((time, index) => (
-                  <View key={index} style={styles.timeRow}>
-                    <TextInput
+                  <View key={index} style={[styles.fixedTimeBlock, { borderColor: theme.border }]}>
+                    <View style={styles.timeHeader}>
+                      <Text style={styles.fieldLabel}>시간 {index + 1}</Text>
+                      <Pressable
+                        disabled={draftSettings.fixedTimes.length <= 1}
+                        style={[styles.removeTimeButton, draftSettings.fixedTimes.length <= 1 && styles.disabledButton]}
+                        onPress={() => setDraftSettings({ ...draftSettings, fixedTimes: draftSettings.fixedTimes.filter((_, itemIndex) => itemIndex !== index) })}
+                      >
+                        <Text style={styles.removeTimeText}>삭제</Text>
+                      </Pressable>
+                    </View>
+                    <TimeWheel
                       value={time}
-                      onChangeText={(value) => {
-                        const nextTimes = [...draftSettings.fixedTimes];
-                        nextTimes[index] = value;
-                        setDraftSettings({ ...draftSettings, fixedTimes: nextTimes });
+                      onChange={(value) => {
+                        setDraftSettings((current) => {
+                          const nextTimes = [...current.fixedTimes];
+                          nextTimes[index] = value;
+                          return { ...current, fixedTimes: nextTimes };
+                        });
                       }}
-                      placeholder="10:00"
-                      style={[styles.input, styles.timeInput]}
                     />
-                    <Pressable
-                      disabled={draftSettings.fixedTimes.length <= 1}
-                      style={[styles.removeTimeButton, draftSettings.fixedTimes.length <= 1 && styles.disabledButton]}
-                      onPress={() => setDraftSettings({ ...draftSettings, fixedTimes: draftSettings.fixedTimes.filter((_, itemIndex) => itemIndex !== index) })}
-                    >
-                      <Text style={styles.removeTimeText}>삭제</Text>
-                    </Pressable>
                   </View>
                 ))}
               </>
             ) : (
               <>
-                <Field label="시작" value={draftSettings.startTime} onChangeText={(startTime) => setDraftSettings({ ...draftSettings, startTime })} />
-                <Field label="방해금지 시작" value={draftSettings.dndStart} onChangeText={(dndStart) => setDraftSettings({ ...draftSettings, dndStart })} />
-                <Field label="방해금지 종료" value={draftSettings.dndEnd} onChangeText={(dndEnd) => setDraftSettings({ ...draftSettings, dndEnd })} />
+                <TimeWheel label="시작" value={draftSettings.startTime} onChange={(startTime) => setDraftSettings((current) => ({ ...current, startTime }))} />
+                <TimeWheel label="방해금지 시작" value={draftSettings.dndStart} onChange={(dndStart) => setDraftSettings((current) => ({ ...current, dndStart }))} />
+                <TimeWheel label="방해금지 종료" value={draftSettings.dndEnd} onChange={(dndEnd) => setDraftSettings((current) => ({ ...current, dndEnd }))} />
                 <IntervalWheel
                   value={draftSettings.intervalMinutes}
-                  onChange={(intervalMinutes) => setDraftSettings({ ...draftSettings, intervalMinutes })}
+                  onChange={(intervalMinutes) => {
+                    Keyboard.dismiss();
+                    setDraftSettings((current) => ({ ...current, intervalMinutes }));
+                  }}
                 />
               </>
             )}
@@ -232,7 +249,7 @@ export function SettingsScreen({ settings, onChange, onSave }: Props) {
         {draftSettings.enabled && editing ? (
           <View style={styles.simulationBox}>
             <Text style={styles.simulationLabel}>이렇게 저장하면</Text>
-            <Text style={[styles.simulationText, { color: theme.tint }]}>{summary.countText}</Text>
+            <Text style={[styles.simulationText, { color: theme.tint }]}>{draftSummary.countText}</Text>
           </View>
         ) : null}
         {validationError ? <Text style={styles.failedNotice}>{validationError}</Text> : null}
@@ -244,7 +261,10 @@ export function SettingsScreen({ settings, onChange, onSave }: Props) {
               { backgroundColor: saveState === "saved" ? "#3fb565" : saveState === "failed" ? "#d92d20" : theme.tint },
               saveState === "saving" && styles.savePending
             ]}
-            onPress={handleSave}
+            onPress={() => {
+              Keyboard.dismiss();
+              void handleSave();
+            }}
           >
             <Text style={styles.saveText}>
               {saveState === "saving" ? "저장 중" : saveState === "saved" ? "저장 완료" : saveState === "failed" ? "저장 실패" : "저장"}
@@ -262,27 +282,97 @@ export function SettingsScreen({ settings, onChange, onSave }: Props) {
   );
 }
 
-function Field({
+function TimeWheel({
   label,
-  hint,
   value,
-  keyboardType,
-  onChangeText
+  onChange
 }: {
-  label: string;
-  hint?: string;
+  label?: string;
   value: string;
-  keyboardType?: "number-pad";
-  onChangeText: (value: string) => void;
+  onChange: (value: string) => void;
 }) {
+  const theme = useAppTheme();
+  const normalized = normalizeTimeText(value) || "00:00";
+  const [hour, minute] = normalized.split(":").map(Number);
+
   return (
     <View style={styles.field}>
-      <View style={styles.fieldHeader}>
-        <Text style={styles.fieldLabel}>{label}</Text>
-        {hint ? <Text style={styles.fieldHint}>{hint}</Text> : null}
+      {label ? <Text style={styles.fieldLabel}>{label}</Text> : null}
+      <View style={[styles.timeWheel, { borderColor: theme.border }]}>
+        <WheelColumn
+          options={hourOptions}
+          value={hour}
+          suffix="시"
+          onChange={(nextHour) => onChange(`${String(nextHour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`)}
+        />
+        <View style={[styles.timeWheelDivider, { backgroundColor: theme.border }]} />
+        <WheelColumn
+          options={minuteOptions}
+          value={minute}
+          suffix="분"
+          onChange={(nextMinute) => onChange(`${String(hour).padStart(2, "0")}:${String(nextMinute).padStart(2, "0")}`)}
+        />
       </View>
-      <TextInput value={value} onChangeText={onChangeText} keyboardType={keyboardType} style={styles.input} />
     </View>
+  );
+}
+
+function WheelColumn({
+  options,
+  value,
+  suffix,
+  onChange
+}: {
+  options: number[];
+  value: number;
+  suffix: string;
+  onChange: (value: number) => void;
+}) {
+  const theme = useAppTheme();
+  const wheelRef = useRef<ScrollView | null>(null);
+  const selectedIndex = Math.max(0, options.indexOf(value));
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      wheelRef.current?.scrollTo({ y: selectedIndex * TIME_WHEEL_ITEM_HEIGHT, animated: false });
+    });
+  }, [selectedIndex]);
+
+  const selectFromScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const nextIndex = Math.max(0, Math.min(options.length - 1, Math.round(event.nativeEvent.contentOffset.y / TIME_WHEEL_ITEM_HEIGHT)));
+    const nextValue = options[nextIndex];
+    if (nextValue !== value) onChange(nextValue);
+  };
+
+  return (
+    <ScrollView
+      ref={wheelRef}
+      style={styles.timeWheelColumn}
+      contentContainerStyle={styles.timeWheelColumnContent}
+      showsVerticalScrollIndicator={false}
+      nestedScrollEnabled
+      snapToInterval={TIME_WHEEL_ITEM_HEIGHT}
+      decelerationRate="fast"
+      onMomentumScrollEnd={selectFromScroll}
+      onScrollEndDrag={(event) => {
+        if (Math.abs(event.nativeEvent.velocity?.y || 0) < 0.1) selectFromScroll(event);
+      }}
+    >
+      {options.map((option) => {
+        const selected = option === value;
+        return (
+          <Pressable
+            key={option}
+            style={[styles.timeWheelOption, selected && { backgroundColor: theme.soft }]}
+            onPress={() => onChange(option)}
+          >
+            <Text style={[styles.timeWheelOptionText, selected && { color: theme.tint, fontSize: 19 }]}>
+              {String(option).padStart(2, "0")}{suffix}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
   );
 }
 
@@ -349,12 +439,17 @@ export function normalizeNotificationSettings(settings: NotificationSettings): N
 }
 
 function normalizeTimeText(value: string) {
-  const match = value.match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return null;
-  const hour = Number(match[1]);
-  const minute = Number(match[2]);
+  const digits = timeDigits(value);
+  if (digits.length !== 3 && digits.length !== 4) return null;
+  const padded = digits.padStart(4, "0");
+  const hour = Number(padded.slice(0, 2));
+  const minute = Number(padded.slice(2));
   if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function timeDigits(value: string) {
+  return value.replace(/\D/g, "");
 }
 
 function validateNotificationSettings(settings: NotificationSettings) {
@@ -364,14 +459,14 @@ function validateNotificationSettings(settings: NotificationSettings) {
     if (!settings.weekdays.length) return "요일을 하나 이상 골라줘.";
     if (!settings.fixedTimes.length) return "알림 시간을 하나 이상 입력해줘.";
     if (settings.fixedTimes.some((time) => !normalizeTimeText(time))) {
-      return "특정 시간은 10:00처럼 입력해줘.";
+      return "특정 시간을 다시 선택해줘.";
     }
     return null;
   }
 
-  if (!normalizeTimeText(settings.startTime)) return "시작 시간을 09:00처럼 입력해줘.";
-  if (!normalizeTimeText(settings.dndStart)) return "방해금지 시작 시간을 22:00처럼 입력해줘.";
-  if (!normalizeTimeText(settings.dndEnd)) return "방해금지 종료 시간을 08:00처럼 입력해줘.";
+  if (!normalizeTimeText(settings.startTime)) return "시작 시간을 다시 선택해줘.";
+  if (!normalizeTimeText(settings.dndStart)) return "방해금지 시작 시간을 다시 선택해줘.";
+  if (!normalizeTimeText(settings.dndEnd)) return "방해금지 종료 시간을 다시 선택해줘.";
   const start = parseTime(settings.startTime);
   const dndStart = parseTime(settings.dndStart);
   const dndEnd = parseTime(settings.dndEnd);
@@ -535,20 +630,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "900"
   },
-  fieldHint: {
-    flex: 1,
-    color: "#98a294",
-    fontSize: 12,
-    fontWeight: "800",
-    textAlign: "right"
-  },
-  input: {
-    minHeight: 44,
-    paddingHorizontal: 12,
+  timeWheel: {
+    height: TIME_WHEEL_ITEM_HEIGHT * 3 + 2,
+    flexDirection: "row",
     borderWidth: 1,
-    borderColor: "#dfe8da",
     borderRadius: 8,
-    color: "#18241b"
+    overflow: "hidden",
+    backgroundColor: "#fff"
+  },
+  timeWheelColumn: {
+    flex: 1
+  },
+  timeWheelColumnContent: {
+    paddingVertical: TIME_WHEEL_ITEM_HEIGHT
+  },
+  timeWheelDivider: {
+    width: 1
+  },
+  timeWheelOption: {
+    height: TIME_WHEEL_ITEM_HEIGHT,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  timeWheelOptionText: {
+    color: "#657064",
+    fontSize: 15,
+    fontWeight: "900"
   },
   intervalWheel: {
     maxHeight: 168,
@@ -623,13 +730,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "900"
   },
-  timeRow: {
-    flexDirection: "row",
+  fixedTimeBlock: {
     gap: 8,
-    alignItems: "center"
-  },
-  timeInput: {
-    flex: 1
+    padding: 10,
+    borderWidth: 1,
+    borderRadius: 8,
+    backgroundColor: "#fff"
   },
   removeTimeButton: {
     paddingHorizontal: 12,
