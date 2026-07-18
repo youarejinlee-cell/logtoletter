@@ -1,10 +1,13 @@
-import { useEffect, useState } from "react";
-import { Image, Platform, Pressable, StatusBar as NativeStatusBar, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Alert, Modal, Platform, Pressable, StatusBar as NativeStatusBar, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import * as Notifications from "expo-notifications";
 import * as SplashScreen from "expo-splash-screen";
 import { User } from "@supabase/supabase-js";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthCard } from "./src/components/AuthCard";
 import { BottomTabs, TabKey } from "./src/components/BottomTabs";
+import { FirstRunGuideModal } from "./src/components/FirstRunGuideModal";
 import { AccountScreen } from "./src/screens/AccountScreen";
 import { AppSettingsScreen } from "./src/screens/AppSettingsScreen";
 import { CalendarScreen } from "./src/screens/CalendarScreen";
@@ -25,7 +28,7 @@ import {
   scheduleTestLogNotification
 } from "./src/lib/notifications";
 import { deleteRemoteEntries, deleteRemoteUserData, generateDueLetters, normalizeStateIds, pullAppState, syncAppState, upsertEntry, upsertRemoteSettings } from "./src/lib/remoteSync";
-import { defaultState, loadAppState, saveAppState } from "./src/lib/storage";
+import { claimGuestStorageNotice, completeFirstRunGuide, defaultState, hasCompletedFirstRunGuide, loadAppState, removeAppState, saveAppState } from "./src/lib/storage";
 import { deleteAccount, getCurrentSession, signInWithGoogle, signOut, supabase } from "./src/lib/supabase";
 import { AppThemeProvider, cosmicTheme } from "./src/lib/theme";
 import { AppState, Entry, Letter, Mood } from "./src/types/domain";
@@ -36,9 +39,20 @@ const topSafePadding = Platform.select({
   default: 24
 });
 
-const APP_NAME = "Log Planet";
-const APP_TAGLINE = "기록이 쌓이면 나만의 행성이 돼";
 const LETTER_ARCHIVE_ENABLED = false;
+
+const tabHeaderMeta: Record<TabKey, { eyebrow: string; title: string; lead: string }> = {
+  universe: { eyebrow: "PLANET", title: "행성", lead: "기록이 쌓이면 나만의 행성이 돼." },
+  capture: { eyebrow: "LOG", title: "기록", lead: "지금 이 순간의 생각과 감정을 솔직하게 남겨봐." },
+  calendar: { eyebrow: "COLLECTION", title: "모아보기", lead: "그날의 나는 무슨 생각을 했을까?" },
+  inbox: { eyebrow: "LETTER", title: "편지보관함", lead: "지난 날의 네가 보낸 편지를 확인해봐." },
+  collection: { eyebrow: "ANALYSIS", title: "분석 보기", lead: "남긴 기록을 여러 각도에서 다시 볼 수 있어." },
+  settings: { eyebrow: "NOTIFICATION", title: "기록 알림 설정", lead: "순간의 생각을 기록할 수 있도록 앱 푸시를 보내줄게." },
+  account: { eyebrow: "ACCOUNT", title: "계정", lead: "로그인과 데이터 관리를 여기에서 할 수 있어." },
+  appSettings: { eyebrow: "SETTINGS", title: "설정", lead: "앱의 기록 경험을 나에게 맞게 조정해봐." },
+  guide: { eyebrow: "GUIDE", title: "가이드", lead: "지금의 기록이 쌓여 너만의 행성이 되도록." },
+  dev: { eyebrow: "DEVELOPMENT", title: "테스트 콘솔", lead: "개발 기능과 테스트 상태를 확인해." }
+};
 
 function addDays(date: Date, days: number) {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
@@ -50,7 +64,7 @@ function startOfDay(value: string | Date) {
 }
 
 function dateKey(value: string | Date) {
-  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   const date = typeof value === "string" ? new Date(value) : value;
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -81,6 +95,26 @@ function getErrorMessage(error: unknown) {
     ].filter(Boolean).join(" · ") || JSON.stringify(error);
   }
   return String(error || "서버 동기화에 실패했어.");
+}
+
+function confirmGuestEntryImport(entryCount: number) {
+  return new Promise<boolean>((resolve) => {
+    let resolved = false;
+    const finish = (value: boolean) => {
+      if (resolved) return;
+      resolved = true;
+      resolve(value);
+    };
+    Alert.alert(
+      "기기에 남긴 기록 가져오기",
+      `로그인하지 않고 남긴 기록 ${entryCount}개가 있어. 이 계정으로 가져올까?`,
+      [
+        { text: "가져오지 않기", style: "cancel", onPress: () => finish(false) },
+        { text: "가져오기", onPress: () => finish(true) }
+      ],
+      { cancelable: true, onDismiss: () => finish(false) }
+    );
+  });
 }
 
 function sanitizeStateForVariant(state: AppState): AppState {
@@ -420,28 +454,85 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [calendarFocusDate, setCalendarFocusDate] = useState<string | undefined>();
   const [hydrated, setHydrated] = useState(false);
+  const [storageUserId, setStorageUserId] = useState<string | null | undefined>(undefined);
+  const [guestBrowsePromptVisible, setGuestBrowsePromptVisible] = useState(false);
+  const [firstRunGuideVisible, setFirstRunGuideVisible] = useState(false);
+  const [firstRunGuideResolved, setFirstRunGuideResolved] = useState(false);
+  const [guestBrowseTimerReady, setGuestBrowseTimerReady] = useState(false);
+  const activeUserIdRef = useRef<string | null | undefined>(undefined);
+  const scopeRequestRef = useRef(0);
+  const loginInProgressRef = useRef(false);
+  const guestStorageNoticeRef = useRef(false);
+  const guestBrowsePromptShownRef = useRef(false);
   const letters = state.letters;
   const theme = cosmicTheme;
   const activeTab = (!canUseDevTools && tab === "dev") || (!LETTER_ARCHIVE_ENABLED && tab === "inbox") ? "universe" : tab;
+  const activeHeader = tabHeaderMeta[activeTab];
 
   useEffect(() => {
-    void SplashScreen.hideAsync();
+    const openNotificationTarget = (response: Notifications.NotificationResponse | null) => {
+      if (response?.notification.request.content.data?.screen !== "capture") return;
+      setTab("capture");
+      setMenuOpen(false);
+    };
+
+    const subscription = Notifications.addNotificationResponseReceivedListener(openNotificationTarget);
+    Notifications.getLastNotificationResponseAsync()
+      .then(async (response) => {
+        openNotificationTarget(response);
+        if (response) await Notifications.clearLastNotificationResponseAsync();
+      })
+      .catch((error) => console.warn("Notification response check failed", error));
+
+    return () => subscription.remove();
   }, []);
 
   useEffect(() => {
-    loadAppState().then((loaded) => {
-      setState(reconcileLetters(normalizeSavedLetterCopy(sanitizeStateForVariant(normalizeStateIds(loaded)))));
-      setHydrated(true);
-    });
+    hasCompletedFirstRunGuide()
+      .then((completed) => {
+        setFirstRunGuideVisible(!completed);
+        setGuestBrowseTimerReady(completed);
+      })
+      .catch(() => setFirstRunGuideVisible(true))
+      .finally(() => setFirstRunGuideResolved(true));
   }, []);
+
+  useEffect(() => {
+    if (firstRunGuideResolved) void SplashScreen.hideAsync();
+  }, [firstRunGuideResolved]);
+
+  const activateLocalScope = async (nextUser: User | null, migrateLegacy = false, providedState?: AppState) => {
+    const requestId = ++scopeRequestRef.current;
+    const nextUserId = nextUser?.id || null;
+    setHydrated(false);
+    setState(sanitizeStateForVariant(defaultState));
+
+    const loaded = providedState || await loadAppState(nextUserId, { migrateLegacy });
+    if (requestId !== scopeRequestRef.current) return;
+
+    activeUserIdRef.current = nextUserId;
+    setState(reconcileLetters(normalizeSavedLetterCopy(sanitizeStateForVariant(normalizeStateIds(loaded)))));
+    setUser(nextUser);
+    setStorageUserId(nextUserId);
+    setCalendarFocusDate(undefined);
+    setHydrated(true);
+  };
 
   useEffect(() => {
     getCurrentSession()
-      .then((session) => setUser(session?.user || null))
-      .catch(() => setUser(null));
+      .then((session) => activateLocalScope(session?.user || null, true))
+      .catch(() => activateLocalScope(null, true));
 
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null);
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "INITIAL_SESSION") return;
+      if (event === "SIGNED_IN" && loginInProgressRef.current) return;
+      const nextUser = session?.user || null;
+      const nextUserId = nextUser?.id || null;
+      if (activeUserIdRef.current === nextUserId) {
+        setUser(nextUser);
+        return;
+      }
+      void activateLocalScope(nextUser);
     });
 
     return () => {
@@ -450,11 +541,32 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!hydrated || storageUserId === undefined) return;
     const timer = setTimeout(() => {
-      saveAppState(state);
+      saveAppState(state, storageUserId);
     }, 300);
     return () => clearTimeout(timer);
-  }, [state]);
+  }, [hydrated, state, storageUserId]);
+
+  useEffect(() => {
+    if (user) {
+      setGuestBrowsePromptVisible(false);
+      return;
+    }
+    if (!hydrated || storageUserId !== null || !guestBrowseTimerReady || guestBrowsePromptShownRef.current) return;
+
+    const timer = setTimeout(() => {
+      guestBrowsePromptShownRef.current = true;
+      setGuestBrowsePromptVisible(true);
+    }, 7000);
+    return () => clearTimeout(timer);
+  }, [guestBrowseTimerReady, hydrated, storageUserId, user]);
+
+  const dismissFirstRunGuide = () => {
+    setFirstRunGuideVisible(false);
+    setGuestBrowseTimerReady(true);
+    void completeFirstRunGuide();
+  };
 
   const runFullSync = async (targetUser = user, targetState = state) => {
     if (!targetUser) return;
@@ -484,9 +596,9 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!hydrated || !user) return;
+    if (!hydrated || !user || storageUserId !== user.id) return;
     runFullSync(user, state);
-  }, [hydrated, user?.id]);
+  }, [hydrated, storageUserId, user?.id]);
 
   const addEntry = (entry: Entry) => {
     const normalized = { ...entry, id: isUuid(entry.id) ? entry.id : createId() };
@@ -504,6 +616,23 @@ export default function App() {
           console.warn("Supabase entry upsert failed", error);
           setSyncStatus("실패");
           setAuthError(getErrorMessage(error));
+        });
+    } else if (!guestStorageNoticeRef.current) {
+      guestStorageNoticeRef.current = true;
+      void claimGuestStorageNotice()
+        .then((shouldShow) => {
+          if (!shouldShow) return;
+          Alert.alert(
+            "이 기록은 현재 기기에만 저장돼",
+            "로그인하지 않은 기록은 앱을 삭제하거나 기기를 바꾸면 복구할 수 없어. 로그인하면 안전하게 보관하고 행성으로 불러올 수 있어.",
+            [
+              { text: "나중에", style: "cancel" },
+              { text: "로그인", onPress: () => void handleGoogleLogin() }
+            ]
+          );
+        })
+        .catch(() => {
+          guestStorageNoticeRef.current = false;
         });
     }
     setTab("calendar");
@@ -579,22 +708,49 @@ export default function App() {
   const handleGoogleLogin = async () => {
     setAuthLoading(true);
     setAuthError(null);
+    loginInProgressRef.current = true;
     try {
       const session = await signInWithGoogle();
-      setUser(session?.user || null);
       if (session?.user) {
-        await runFullSync(session.user, state);
+        const guestState = await loadAppState(null);
+        const shouldImport = guestState.entries.length
+          ? await confirmGuestEntryImport(guestState.entries.length)
+          : false;
+
+        if (shouldImport) {
+          try {
+            setSyncStatus("게스트 기록 가져오는 중");
+            const accountState = await loadAppState(session.user.id);
+            const mergedEntries = new Map(accountState.entries.map((entry) => [entry.id, entry]));
+            guestState.entries.forEach((entry) => mergedEntries.set(entry.id, entry));
+            const synced = await syncAppState(session.user, {
+              ...accountState,
+              entries: [...mergedEntries.values()]
+            });
+            await saveAppState(synced, session.user.id);
+            await removeAppState(null);
+            await activateLocalScope(session.user, false, synced);
+            setSyncStatus(`게스트 기록 ${guestState.entries.length}개 가져오기 완료`);
+          } catch (importError) {
+            await activateLocalScope(session.user);
+            setSyncStatus("게스트 기록 가져오기 실패");
+            setAuthError(`로그인은 완료했지만 게스트 기록을 가져오지 못했어. 기기의 게스트 기록은 그대로 보관했어. · ${getErrorMessage(importError)}`);
+          }
+        } else {
+          await activateLocalScope(session.user);
+        }
       }
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "로그인에 실패했어.");
     } finally {
+      loginInProgressRef.current = false;
       setAuthLoading(false);
     }
   };
 
   const handleSignOut = async () => {
     await signOut();
-    setUser(null);
+    await activateLocalScope(null);
   };
 
   const handleDeleteUserData = async () => {
@@ -603,6 +759,7 @@ export default function App() {
     try {
       if (user) {
         await deleteRemoteUserData(user.id);
+        await removeAppState(user.id);
       }
       await cancelLogNotifications();
       setNotificationStatus("예약 0개");
@@ -621,10 +778,15 @@ export default function App() {
     setSyncStatus("계정 삭제 중");
     setAuthError(null);
     try {
-      await handleDeleteUserData();
+      const userId = user?.id;
       await deleteAccount();
+      if (userId) await removeAppState(userId);
+      await cancelLogNotifications();
+      setNotificationStatus("예약 0개");
+      setState(sanitizeStateForVariant(defaultState));
+      setCalendarFocusDate(undefined);
       await signOut();
-      setUser(null);
+      await activateLocalScope(null);
       setSyncStatus(null);
       setTab("capture");
     } catch (error) {
@@ -642,15 +804,68 @@ export default function App() {
     });
   };
 
+  const saveMonthlyNote = (monthKey: string, note: string) => {
+    if (!/^\d{4}-\d{2}$/.test(monthKey)) return;
+    const normalizedNote = note.trim().slice(0, 2000);
+    if (!normalizedNote) return;
+    setState((current) => {
+      const next = {
+        ...current,
+        monthlyNotes: { ...current.monthlyNotes, [monthKey]: normalizedNote }
+      };
+      if (user) upsertRemoteSettings(user.id, next).catch((error) => console.warn("Supabase monthly note sync failed", error));
+      return next;
+    });
+  };
+
+  const updateEntry = (entry: Entry) => {
+    const previous = state.entries.find((item) => item.id === entry.id);
+    if (!previous) return;
+
+    setState((current) => ({
+      ...current,
+      entries: current.entries.map((item) => (item.id === entry.id ? entry : item))
+    }));
+    if (!user) return;
+
+    setSyncStatus("기록 수정 중");
+    setAuthError(null);
+    upsertEntry(user.id, entry)
+      .then(() => setSyncStatus("기록 수정 완료"))
+      .catch((error) => {
+        console.warn("Supabase update entry failed", error);
+        setState((current) => ({
+          ...current,
+          entries: current.entries.map((item) => (item.id === previous.id ? previous : item))
+        }));
+        setSyncStatus("실패");
+        setAuthError(getErrorMessage(error));
+      });
+  };
+
   const deleteEntries = (entryIds: string[]) => {
     const ids = new Set(entryIds);
-    if (user) {
-      deleteRemoteEntries(user.id, entryIds).catch((error) => console.warn("Supabase delete entry failed", error));
-    }
+    const deletedEntries = state.entries.filter((entry) => ids.has(entry.id));
     setState((current) => ({
       ...current,
       entries: current.entries.filter((entry) => !ids.has(entry.id))
     }));
+    if (!user) return;
+
+    setSyncStatus("기록 삭제 중");
+    setAuthError(null);
+    deleteRemoteEntries(user.id, entryIds)
+      .then(() => setSyncStatus("기록 삭제 완료"))
+      .catch((error) => {
+        console.warn("Supabase delete entry failed", error);
+        setState((current) => ({
+          ...current,
+          entries: [...current.entries, ...deletedEntries.filter((deleted) => !current.entries.some((entry) => entry.id === deleted.id))]
+            .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
+        }));
+        setSyncStatus("실패");
+        setAuthError(getErrorMessage(error));
+      });
   };
 
   const applyNotificationSettings = async (settings: AppState["settings"]) => {
@@ -658,16 +873,19 @@ export default function App() {
       if (!settings.enabled) {
         await cancelLogNotifications();
         setNotificationStatus("꺼짐");
-        return;
+        return { status: "꺼짐", count: 0 };
       }
       const result = await scheduleLogNotifications(settings);
       const countLabel = settings.scheduleMode === "fixed"
         ? `일주일 ${result.count}번의 기록을 할 수 있어`
         : `하루 ${result.count}번의 기록을 할 수 있어`;
       setNotificationStatus(result.count ? countLabel : result.status);
+      return result;
     } catch (error) {
       console.warn("Notification scheduling failed", error);
-      setNotificationStatus(error instanceof Error ? error.message : "예약 실패");
+      const status = error instanceof Error ? error.message : "예약 실패";
+      setNotificationStatus(status);
+      return { status, count: 0 };
     }
   };
 
@@ -705,7 +923,15 @@ export default function App() {
   }, [hydrated]);
 
   const content = {
-    universe: <UniverseScreen entries={state.entries} />,
+    universe: (
+      <UniverseScreen
+        entries={user ? state.entries : []}
+        guestEntryCount={user ? 0 : state.entries.length}
+        isLoggedIn={Boolean(user)}
+        loginLoading={authLoading}
+        onLogin={handleGoogleLogin}
+      />
+    ),
     capture: <CaptureScreen onAddEntry={addEntry} getNow={() => nowForState(state)} energyColorMode={state.energyColorMode} />,
     calendar: (
       <CalendarScreen
@@ -713,8 +939,11 @@ export default function App() {
         energyColorMode={state.energyColorMode}
         calendarMode={state.calendarEnergyMode}
         targetMoods={state.targetMoods}
+        monthlyNotes={state.monthlyNotes}
         focusDate={calendarFocusDate}
+        onUpdateEntry={updateEntry}
         onDeleteEntries={deleteEntries}
+        onSaveMonthlyNote={saveMonthlyNote}
       />
     ),
     inbox: (
@@ -743,7 +972,10 @@ export default function App() {
         energyColorMode={state.energyColorMode}
         calendarMode={state.calendarEnergyMode}
         targetMoods={state.targetMoods}
+        monthlyNotes={state.monthlyNotes}
+        onUpdateEntry={updateEntry}
         onDeleteEntries={deleteEntries}
+        onSaveMonthlyNote={saveMonthlyNote}
         analysisOnly
       />
     ),
@@ -754,8 +986,18 @@ export default function App() {
           return { ...current, settings };
         })}
         onSave={async (settings) => {
+          const result = await applyNotificationSettings(settings);
+          if (settings.enabled && !result.count) {
+            const disabledSettings = { ...settings, enabled: false };
+            setState((current) => ({ ...current, settings: disabledSettings }));
+            if (user) {
+              await upsertRemoteSettings(user.id, { ...state, settings: disabledSettings });
+            }
+            throw new Error(result.status === "권한 차단됨"
+              ? "알림 권한이 차단되어 있어. 기기 설정에서 허용해줘."
+              : "알림 권한을 허용해야 예약할 수 있어.");
+          }
           const next = { ...state, settings };
-          await applyNotificationSettings(settings);
           if (user) {
             await upsertRemoteSettings(user.id, next);
           }
@@ -804,8 +1046,9 @@ export default function App() {
   }[activeTab];
 
   return (
-    <AppThemeProvider theme={theme}>
-      <View style={styles.safe}>
+    <SafeAreaProvider>
+      <AppThemeProvider theme={theme}>
+        <View style={styles.safe}>
         <SpaceBackdrop />
         <StatusBar style="light" />
         <View
@@ -817,12 +1060,10 @@ export default function App() {
             }
           ]}
         >
-          <View style={styles.brandWrap}>
-            <Image source={require("./assets/app-icon.png")} style={styles.logo} />
-            <View>
-              <Text style={[styles.brand, { color: theme.text }]}>{APP_NAME}</Text>
-              <Text style={[styles.tagline, { color: theme.muted }]}>{APP_TAGLINE}</Text>
-            </View>
+          <View style={styles.pageHeading}>
+            <Text style={styles.pageEyebrow}>{activeHeader.eyebrow}</Text>
+            <Text style={[styles.pageTitle, { color: theme.text }]}>{activeHeader.title}</Text>
+            <Text style={[styles.pageLead, { color: theme.muted }]}>{activeHeader.lead}</Text>
           </View>
           <Pressable
             style={[styles.menuButton, { backgroundColor: theme.soft }]}
@@ -894,8 +1135,38 @@ export default function App() {
         ) : null}
         <View style={styles.body}>{content}</View>
         <BottomTabs active={activeTab} onChange={setTab} cosmic />
-      </View>
-    </AppThemeProvider>
+        <FirstRunGuideModal visible={firstRunGuideVisible} onClose={dismissFirstRunGuide} />
+        <Modal
+          transparent
+          animationType="fade"
+          visible={guestBrowsePromptVisible}
+          onRequestClose={() => setGuestBrowsePromptVisible(false)}
+        >
+          <View style={styles.guestBrowseModalBackdrop}>
+            <View style={styles.guestBrowseModal}>
+              <Text style={styles.guestBrowseModalTitle}>나만의 기록 행성을 만들어봐</Text>
+              <Pressable
+                disabled={authLoading}
+                style={[styles.guestBrowsePrimaryButton, authLoading && styles.guestBrowseButtonDisabled]}
+                onPress={() => {
+                  setGuestBrowsePromptVisible(false);
+                  void handleGoogleLogin();
+                }}
+              >
+                <Text style={styles.guestBrowsePrimaryText}>{authLoading ? "로그인 중" : "로그인 하러 가기"}</Text>
+              </Pressable>
+              <Pressable
+                style={styles.guestBrowseSecondaryButton}
+                onPress={() => setGuestBrowsePromptVisible(false)}
+              >
+                <Text style={styles.guestBrowseSecondaryText}>로그인 없이 둘러보기</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+        </View>
+      </AppThemeProvider>
+    </SafeAreaProvider>
   );
 }
 
@@ -903,6 +1174,61 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: "#070d2a"
+  },
+  guestBrowseModalBackdrop: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    backgroundColor: "rgba(3, 7, 24, 0.72)"
+  },
+  guestBrowseModal: {
+    width: "100%",
+    maxWidth: 340,
+    gap: 10,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "rgba(191, 224, 255, 0.34)",
+    borderRadius: 8,
+    backgroundColor: "#0b1b4d"
+  },
+  guestBrowseModalTitle: {
+    marginBottom: 6,
+    color: "#fff",
+    fontSize: 20,
+    lineHeight: 28,
+    fontWeight: "900",
+    textAlign: "center"
+  },
+  guestBrowsePrimaryButton: {
+    minHeight: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: "#c9e6ff"
+  },
+  guestBrowsePrimaryText: {
+    color: "#0b1b4d",
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  guestBrowseSecondaryButton: {
+    minHeight: 46,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: "rgba(191, 224, 255, 0.3)",
+    borderRadius: 8
+  },
+  guestBrowseSecondaryText: {
+    color: "#d8ebff",
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  guestBrowseButtonDisabled: {
+    opacity: 0.5
   },
   header: {
     flexDirection: "row",
@@ -915,24 +1241,24 @@ const styles = StyleSheet.create({
     borderBottomColor: "#dfe8da",
     backgroundColor: "rgba(7, 13, 42, 0.84)"
   },
-  brandWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10
+  pageHeading: {
+    flex: 1,
+    gap: 2,
+    paddingRight: 12
   },
-  logo: {
-    width: 42,
-    height: 42,
-    borderRadius: 8
+  pageEyebrow: {
+    color: "#9fcfff",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0
   },
-  brand: {
-    color: "#18241b",
-    fontSize: 18,
+  pageTitle: {
+    fontSize: 22,
     fontWeight: "900"
   },
-  tagline: {
-    color: "#657064",
+  pageLead: {
     fontSize: 12,
+    lineHeight: 17,
     fontWeight: "700"
   },
   menuButton: {
@@ -957,7 +1283,7 @@ const styles = StyleSheet.create({
   },
   floatingMenu: {
     position: "absolute",
-    top: 68,
+    top: topSafePadding + 80,
     right: 14,
     zIndex: 20,
     width: 292,

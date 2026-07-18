@@ -30,6 +30,7 @@ type Props = {
 
 export function SettingsScreen({ settings, onChange, onSave }: Props) {
   const theme = useAppTheme();
+  const [draftSettings, setDraftSettings] = useState(settings);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   const [adjustedNotice, setAdjustedNotice] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -40,35 +41,42 @@ export function SettingsScreen({ settings, onChange, onSave }: Props) {
     if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
   }, []);
 
+  useEffect(() => {
+    setDraftSettings(settings);
+    if (!settings.enabled) setEditing(false);
+  }, [settings]);
+
   const handleSave = async () => {
     if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
     setSaveState("saving");
     setAdjustedNotice(null);
     setValidationError(null);
-    const error = validateNotificationSettings(settings);
+    const error = validateNotificationSettings(draftSettings);
     if (error) {
       setSaveState("idle");
       setValidationError(error);
       return;
     }
-    const normalized = normalizeNotificationSettings(settings);
-    if (settings.scheduleMode === "interval" && normalized.intervalMinutes !== settings.intervalMinutes) {
+    const normalized = normalizeNotificationSettings(draftSettings);
+    if (draftSettings.scheduleMode === "interval" && normalized.intervalMinutes !== draftSettings.intervalMinutes) {
       setAdjustedNotice(`알림 간격은 ${normalized.intervalMinutes}분으로 맞췄어.`);
-      onChange(normalized);
     }
     try {
       await onSave(normalized);
+      onChange(normalized);
+      setDraftSettings(normalized);
       setSaveState("saved");
       setEditing(false);
-    } catch {
+    } catch (error) {
       setSaveState("failed");
+      setValidationError(error instanceof Error ? error.message : "알림 설정을 저장하지 못했어.");
     }
     feedbackTimer.current = setTimeout(() => setSaveState("idle"), 1800);
   };
 
   const handleToggle = async (enabled: boolean) => {
-    const next = { ...settings, enabled };
-    onChange(next);
+    const next = { ...(editing ? draftSettings : settings), enabled };
+    setDraftSettings(next);
     setValidationError(null);
     if (enabled) {
       setEditing(true);
@@ -79,6 +87,7 @@ export function SettingsScreen({ settings, onChange, onSave }: Props) {
     setSaveState("saving");
     try {
       await onSave(next);
+      onChange(next);
       setSaveState("saved");
     } catch {
       setSaveState("failed");
@@ -99,7 +108,7 @@ export function SettingsScreen({ settings, onChange, onSave }: Props) {
           <Text style={styles.sectionTitle}>알림 설정</Text>
           <View style={styles.switchWrap}>
             <Switch
-              value={settings.enabled}
+              value={editing ? draftSettings.enabled : settings.enabled}
               onValueChange={handleToggle}
               trackColor={{ false: "#e68a8a", true: "#8ed08b" }}
               thumbColor="#fff"
@@ -112,7 +121,13 @@ export function SettingsScreen({ settings, onChange, onSave }: Props) {
             <View style={styles.summaryHeader}>
               <Text style={styles.summaryTitle}>{settings.enabled ? "알림 요약" : "알림이 설정되어 있지 않아"}</Text>
               {settings.enabled ? (
-                <Pressable style={[styles.changeButton, { backgroundColor: theme.tint }]} onPress={() => setEditing(true)}>
+                <Pressable
+                  style={[styles.changeButton, { backgroundColor: theme.tint }]}
+                  onPress={() => {
+                    setDraftSettings(settings);
+                    setEditing(true);
+                  }}
+                >
                   <Text style={styles.changeButtonText}>변경</Text>
                 </Pressable>
               ) : null}
@@ -130,38 +145,38 @@ export function SettingsScreen({ settings, onChange, onSave }: Props) {
           </View>
         ) : null}
 
-        {settings.enabled && editing ? (
+        {draftSettings.enabled && editing ? (
           <>
             <View style={[styles.modeSwitch, { backgroundColor: theme.soft }]}>
               <Pressable
-                style={[styles.modeButton, settings.scheduleMode !== "fixed" && { backgroundColor: theme.tint }]}
-                onPress={() => onChange({ ...settings, scheduleMode: "interval" })}
+                style={[styles.modeButton, draftSettings.scheduleMode !== "fixed" && { backgroundColor: theme.tint }]}
+                onPress={() => setDraftSettings({ ...draftSettings, scheduleMode: "interval" })}
               >
-                <Text style={[styles.modeText, settings.scheduleMode !== "fixed" && styles.modeTextActive]}>간격 반복</Text>
+                <Text style={[styles.modeText, draftSettings.scheduleMode !== "fixed" && styles.modeTextActive]}>간격 반복</Text>
               </Pressable>
               <Pressable
-                style={[styles.modeButton, settings.scheduleMode === "fixed" && { backgroundColor: theme.tint }]}
-                onPress={() => onChange({ ...settings, scheduleMode: "fixed" })}
+                style={[styles.modeButton, draftSettings.scheduleMode === "fixed" && { backgroundColor: theme.tint }]}
+                onPress={() => setDraftSettings({ ...draftSettings, scheduleMode: "fixed" })}
               >
-                <Text style={[styles.modeText, settings.scheduleMode === "fixed" && styles.modeTextActive]}>특정 시간</Text>
+                <Text style={[styles.modeText, draftSettings.scheduleMode === "fixed" && styles.modeTextActive]}>특정 시간</Text>
               </Pressable>
             </View>
 
-            {settings.scheduleMode === "fixed" ? (
+            {draftSettings.scheduleMode === "fixed" ? (
               <>
                 <Text style={styles.fieldLabel}>요일</Text>
                 <View style={styles.weekdayRow}>
                   {weekdays.map((day) => {
-                    const selected = settings.weekdays.includes(day.value);
+                    const selected = draftSettings.weekdays.includes(day.value);
                     return (
                       <Pressable
                         key={day.value}
                         style={[styles.weekdayChip, selected && { borderColor: theme.tint, backgroundColor: theme.soft }]}
                         onPress={() => {
                           const nextWeekdays = selected
-                            ? settings.weekdays.filter((weekday) => weekday !== day.value)
-                            : [...settings.weekdays, day.value].sort((a, b) => a - b);
-                          onChange({ ...settings, weekdays: nextWeekdays.length ? nextWeekdays : [day.value] });
+                            ? draftSettings.weekdays.filter((weekday) => weekday !== day.value)
+                            : [...draftSettings.weekdays, day.value].sort((a, b) => a - b);
+                          setDraftSettings({ ...draftSettings, weekdays: nextWeekdays.length ? nextWeekdays : [day.value] });
                         }}
                       >
                         <Text style={[styles.weekdayText, selected && { color: theme.tint }]}>{day.label}</Text>
@@ -172,29 +187,29 @@ export function SettingsScreen({ settings, onChange, onSave }: Props) {
                 <View style={styles.timeHeader}>
                   <Text style={styles.fieldLabel}>시간</Text>
                   <Pressable
-                    disabled={settings.fixedTimes.length >= 5}
-                    style={[styles.addTimeButton, { backgroundColor: theme.soft }, settings.fixedTimes.length >= 5 && styles.disabledButton]}
-                    onPress={() => onChange({ ...settings, fixedTimes: [...settings.fixedTimes, "22:00"] })}
+                    disabled={draftSettings.fixedTimes.length >= 5}
+                    style={[styles.addTimeButton, { backgroundColor: theme.soft }, draftSettings.fixedTimes.length >= 5 && styles.disabledButton]}
+                    onPress={() => setDraftSettings({ ...draftSettings, fixedTimes: [...draftSettings.fixedTimes, "22:00"] })}
                   >
                     <Text style={[styles.addTimeText, { color: theme.tint }]}>+ 추가</Text>
                   </Pressable>
                 </View>
-                {settings.fixedTimes.map((time, index) => (
-                  <View key={`${index}-${time}`} style={styles.timeRow}>
+                {draftSettings.fixedTimes.map((time, index) => (
+                  <View key={index} style={styles.timeRow}>
                     <TextInput
                       value={time}
                       onChangeText={(value) => {
-                        const nextTimes = [...settings.fixedTimes];
+                        const nextTimes = [...draftSettings.fixedTimes];
                         nextTimes[index] = value;
-                        onChange({ ...settings, fixedTimes: nextTimes });
+                        setDraftSettings({ ...draftSettings, fixedTimes: nextTimes });
                       }}
                       placeholder="10:00"
                       style={[styles.input, styles.timeInput]}
                     />
                     <Pressable
-                      disabled={settings.fixedTimes.length <= 1}
-                      style={[styles.removeTimeButton, settings.fixedTimes.length <= 1 && styles.disabledButton]}
-                      onPress={() => onChange({ ...settings, fixedTimes: settings.fixedTimes.filter((_, itemIndex) => itemIndex !== index) })}
+                      disabled={draftSettings.fixedTimes.length <= 1}
+                      style={[styles.removeTimeButton, draftSettings.fixedTimes.length <= 1 && styles.disabledButton]}
+                      onPress={() => setDraftSettings({ ...draftSettings, fixedTimes: draftSettings.fixedTimes.filter((_, itemIndex) => itemIndex !== index) })}
                     >
                       <Text style={styles.removeTimeText}>삭제</Text>
                     </Pressable>
@@ -203,25 +218,25 @@ export function SettingsScreen({ settings, onChange, onSave }: Props) {
               </>
             ) : (
               <>
-                <Field label="시작" value={settings.startTime} onChangeText={(startTime) => onChange({ ...settings, startTime })} />
-                <Field label="방해금지 시작" value={settings.dndStart} onChangeText={(dndStart) => onChange({ ...settings, dndStart })} />
-                <Field label="방해금지 종료" value={settings.dndEnd} onChangeText={(dndEnd) => onChange({ ...settings, dndEnd })} />
+                <Field label="시작" value={draftSettings.startTime} onChangeText={(startTime) => setDraftSettings({ ...draftSettings, startTime })} />
+                <Field label="방해금지 시작" value={draftSettings.dndStart} onChangeText={(dndStart) => setDraftSettings({ ...draftSettings, dndStart })} />
+                <Field label="방해금지 종료" value={draftSettings.dndEnd} onChangeText={(dndEnd) => setDraftSettings({ ...draftSettings, dndEnd })} />
                 <IntervalWheel
-                  value={settings.intervalMinutes}
-                  onChange={(intervalMinutes) => onChange({ ...settings, intervalMinutes })}
+                  value={draftSettings.intervalMinutes}
+                  onChange={(intervalMinutes) => setDraftSettings({ ...draftSettings, intervalMinutes })}
                 />
               </>
             )}
           </>
         ) : null}
-        {settings.enabled && editing ? (
+        {draftSettings.enabled && editing ? (
           <View style={styles.simulationBox}>
             <Text style={styles.simulationLabel}>이렇게 저장하면</Text>
             <Text style={[styles.simulationText, { color: theme.tint }]}>{summary.countText}</Text>
           </View>
         ) : null}
         {validationError ? <Text style={styles.failedNotice}>{validationError}</Text> : null}
-        {settings.enabled && editing ? (
+        {draftSettings.enabled && editing ? (
           <Pressable
             disabled={saveState === "saving"}
             style={[

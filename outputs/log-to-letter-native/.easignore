@@ -1,0 +1,14 @@
+node_modules/
+.expo/
+dist/
+tmp/
+*.log
+.env
+.env.local
+# Source and backup assets retained for placement work, not bundled by the app.
+assets/universe_continent_v3/
+assets/universe-color-version/
+assets/universe-nature-version/
+assets/_continent_edge_backups/
+assets/_incoming_continent_originals/
+assets/_incoming_continent_transparent_originals/

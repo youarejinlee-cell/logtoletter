@@ -1,20 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Animated, Easing, Image, ImageSourcePropType, PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, Easing, Image, ImageSourcePropType, Linking, PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Asset } from "expo-asset";
+import { useAudioPlayer } from "expo-audio";
+import { canUseDevTools } from "../lib/appVariant";
 import { categoryForEntry } from "../lib/entryCategories";
 import { Entry, EntryCategory, Mood } from "../types/domain";
 
 type Props = {
   entries: Entry[];
+  guestEntryCount?: number;
+  isLoggedIn: boolean;
+  loginLoading?: boolean;
+  onLogin: () => void;
 };
 
-type UniverseView = "home" | "planet" | "continent" | "guide";
-
 type MoodBiome = "calm" | "grateful" | "proud" | "excited" | "anxious" | "other";
-type ContinentLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 type MoodGroup = "positive" | "neutral" | "negative";
 type UniverseCategory = "work" | "taste" | "relationship" | "self-discipline" | "wealth" | "health";
 type UniverseContinentRank = 1 | 2 | 3 | 4 | 5 | 6;
-type UniverseContinentLevel = "bare" | 1 | 2 | 3 | 4 | 5;
 type V4Category = UniverseCategory | "etc";
 type V4Level = 1 | 2 | 3 | 4;
 type V4SlotKey = "land_01" | "land_02" | "land_03" | "land_04" | "land_05" | "land_06" | "etc_lake";
@@ -39,6 +43,9 @@ type ContinentSlice = ContinentMeta & {
   entries: Entry[];
 };
 
+const PLANET_BGM_ENABLED_KEY = "log-planet-bgm-enabled-v2";
+const planetBgmAsset = require("../../bgm/logplanet_bgm_1.mp3");
+
 const continentMeta: ContinentMeta[] = [
   { key: "work", name: "일의 대륙", label: "일", color: "#a9c7ff", softColor: "rgba(169, 199, 255, 0.24)", keeperColor: "#d9e6ff" },
   { key: "taste", name: "취향의 대륙", label: "취향/취미", color: "#ffc56f", softColor: "rgba(255, 197, 111, 0.22)", keeperColor: "#ffe5b8" },
@@ -57,335 +64,8 @@ const moodBiomes: Array<{ key: MoodBiome; label: string; icon: string; color: st
   { key: "other", label: "기타", icon: "…", color: "#d8d9ff", glow: "rgba(216, 217, 255, 0.22)" }
 ];
 
-const v3PlanetBaseAsset = require("../../assets/universe_continent_v3/universe_base_bare.png");
 const v4BackgroundAsset = require("../../assets/assets_v4/continent/background.png");
 const v4BarePlanetAsset = require("../../assets/assets_v4/continent/bare_planet.png");
-
-const v3ContinentBareAssets: Record<UniverseContinentRank, ImageSourcePropType> = {
-  1: require("../../assets/universe_continent_v3/continent_1_bare.png"),
-  2: require("../../assets/universe_continent_v3/continent_2_bare.png"),
-  3: require("../../assets/universe_continent_v3/continent_3_bare.png"),
-  4: require("../../assets/universe_continent_v3/continent_4_bare.png"),
-  5: require("../../assets/universe_continent_v3/continent_5_bare.png"),
-  6: require("../../assets/universe_continent_v3/continent_6_bare.png")
-};
-
-const v3ContinentAssets: Record<UniverseContinentRank, Record<UniverseCategory, Record<Exclude<UniverseContinentLevel, "bare">, ImageSourcePropType>>> = {
-  1: {
-    work: {
-      1: require("../../assets/universe_continent_v3/continent_1_work_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_1_work_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_1_work_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_1_work_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_1_work_lv5.png")
-    },
-    taste: {
-      1: require("../../assets/universe_continent_v3/continent_1_taste_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_1_taste_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_1_taste_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_1_taste_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_1_taste_lv5.png")
-    },
-    relationship: {
-      1: require("../../assets/universe_continent_v3/continent_1_relationship_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_1_relationship_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_1_relationship_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_1_relationship_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_1_relationship_lv5.png")
-    },
-    "self-discipline": {
-      1: require("../../assets/universe_continent_v3/continent_1_self-discipline_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_1_self-discipline_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_1_self-discipline_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_1_self-discipline_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_1_self-discipline_lv5.png")
-    },
-    wealth: {
-      1: require("../../assets/universe_continent_v3/continent_1_wealth_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_1_wealth_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_1_wealth_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_1_wealth_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_1_wealth_lv5.png")
-    },
-    health: {
-      1: require("../../assets/universe_continent_v3/continent_1_health_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_1_health_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_1_health_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_1_health_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_1_health_lv5.png")
-    }
-  },
-  2: {
-    work: {
-      1: require("../../assets/universe_continent_v3/continent_2_work_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_2_work_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_2_work_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_2_work_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_2_work_lv5.png")
-    },
-    taste: {
-      1: require("../../assets/universe_continent_v3/continent_2_taste_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_2_taste_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_2_taste_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_2_taste_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_2_taste_lv5.png")
-    },
-    relationship: {
-      1: require("../../assets/universe_continent_v3/continent_2_relationship_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_2_relationship_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_2_relationship_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_2_relationship_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_2_relationship_lv5.png")
-    },
-    "self-discipline": {
-      1: require("../../assets/universe_continent_v3/continent_2_self-discipline_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_2_self-discipline_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_2_self-discipline_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_2_self-discipline_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_2_self-discipline_lv5.png")
-    },
-    wealth: {
-      1: require("../../assets/universe_continent_v3/continent_2_wealth_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_2_wealth_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_2_wealth_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_2_wealth_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_2_wealth_lv5.png")
-    },
-    health: {
-      1: require("../../assets/universe_continent_v3/continent_2_health_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_2_health_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_2_health_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_2_health_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_2_health_lv5.png")
-    }
-  },
-  3: {
-    work: {
-      1: require("../../assets/universe_continent_v3/continent_3_work_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_3_work_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_3_work_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_3_work_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_3_work_lv5.png")
-    },
-    taste: {
-      1: require("../../assets/universe_continent_v3/continent_3_taste_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_3_taste_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_3_taste_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_3_taste_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_3_taste_lv5.png")
-    },
-    relationship: {
-      1: require("../../assets/universe_continent_v3/continent_3_relationship_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_3_relationship_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_3_relationship_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_3_relationship_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_3_relationship_lv5.png")
-    },
-    "self-discipline": {
-      1: require("../../assets/universe_continent_v3/continent_3_self-discipline_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_3_self-discipline_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_3_self-discipline_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_3_self-discipline_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_3_self-discipline_lv5.png")
-    },
-    wealth: {
-      1: require("../../assets/universe_continent_v3/continent_3_wealth_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_3_wealth_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_3_wealth_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_3_wealth_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_3_wealth_lv5.png")
-    },
-    health: {
-      1: require("../../assets/universe_continent_v3/continent_3_health_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_3_health_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_3_health_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_3_health_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_3_health_lv5.png")
-    }
-  },
-  4: {
-    work: {
-      1: require("../../assets/universe_continent_v3/continent_4_work_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_4_work_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_4_work_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_4_work_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_4_work_lv5.png")
-    },
-    taste: {
-      1: require("../../assets/universe_continent_v3/continent_4_taste_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_4_taste_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_4_taste_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_4_taste_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_4_taste_lv5.png")
-    },
-    relationship: {
-      1: require("../../assets/universe_continent_v3/continent_4_relationship_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_4_relationship_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_4_relationship_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_4_relationship_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_4_relationship_lv5.png")
-    },
-    "self-discipline": {
-      1: require("../../assets/universe_continent_v3/continent_4_self-discipline_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_4_self-discipline_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_4_self-discipline_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_4_self-discipline_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_4_self-discipline_lv5.png")
-    },
-    wealth: {
-      1: require("../../assets/universe_continent_v3/continent_4_wealth_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_4_wealth_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_4_wealth_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_4_wealth_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_4_wealth_lv5.png")
-    },
-    health: {
-      1: require("../../assets/universe_continent_v3/continent_4_health_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_4_health_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_4_health_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_4_health_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_4_health_lv5.png")
-    }
-  },
-  5: {
-    work: {
-      1: require("../../assets/universe_continent_v3/continent_5_work_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_5_work_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_5_work_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_5_work_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_5_work_lv5.png")
-    },
-    taste: {
-      1: require("../../assets/universe_continent_v3/continent_5_taste_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_5_taste_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_5_taste_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_5_taste_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_5_taste_lv5.png")
-    },
-    relationship: {
-      1: require("../../assets/universe_continent_v3/continent_5_relationship_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_5_relationship_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_5_relationship_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_5_relationship_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_5_relationship_lv5.png")
-    },
-    "self-discipline": {
-      1: require("../../assets/universe_continent_v3/continent_5_self-discipline_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_5_self-discipline_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_5_self-discipline_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_5_self-discipline_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_5_self-discipline_lv5.png")
-    },
-    wealth: {
-      1: require("../../assets/universe_continent_v3/continent_5_wealth_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_5_wealth_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_5_wealth_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_5_wealth_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_5_wealth_lv5.png")
-    },
-    health: {
-      1: require("../../assets/universe_continent_v3/continent_5_health_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_5_health_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_5_health_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_5_health_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_5_health_lv5.png")
-    }
-  },
-  6: {
-    work: {
-      1: require("../../assets/universe_continent_v3/continent_6_work_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_6_work_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_6_work_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_6_work_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_6_work_lv5.png")
-    },
-    taste: {
-      1: require("../../assets/universe_continent_v3/continent_6_taste_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_6_taste_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_6_taste_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_6_taste_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_6_taste_lv5.png")
-    },
-    relationship: {
-      1: require("../../assets/universe_continent_v3/continent_6_relationship_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_6_relationship_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_6_relationship_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_6_relationship_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_6_relationship_lv5.png")
-    },
-    "self-discipline": {
-      1: require("../../assets/universe_continent_v3/continent_6_self-discipline_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_6_self-discipline_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_6_self-discipline_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_6_self-discipline_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_6_self-discipline_lv5.png")
-    },
-    wealth: {
-      1: require("../../assets/universe_continent_v3/continent_6_wealth_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_6_wealth_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_6_wealth_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_6_wealth_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_6_wealth_lv5.png")
-    },
-    health: {
-      1: require("../../assets/universe_continent_v3/continent_6_health_lv1.png"),
-      2: require("../../assets/universe_continent_v3/continent_6_health_lv2.png"),
-      3: require("../../assets/universe_continent_v3/continent_6_health_lv3.png"),
-      4: require("../../assets/universe_continent_v3/continent_6_health_lv4.png"),
-      5: require("../../assets/universe_continent_v3/continent_6_health_lv5.png")
-    }
-  }
-};
-
-const continentLayerOrder = ["up-left", "up-right", "down-right", "down-left"] as const;
-
-const continentLayerAssets: Record<(typeof continentLayerOrder)[number], number> = {
-  "up-left": require("../../assets/universe-nature-version/universe-continent-up-left-lv0.png"),
-  "down-left": require("../../assets/universe-nature-version/universe-continent-down-left-lv0.png"),
-  "up-right": require("../../assets/universe-nature-version/universe-continent-up-right-lv0.png"),
-  "down-right": require("../../assets/universe-nature-version/universe-continent-down-right-lv0.png")
-};
-
-const continentLayerLevelAssets: Partial<Record<(typeof continentLayerOrder)[number], Record<ContinentLevel, number>>> = {
-  "up-left": {
-    0: require("../../assets/universe-nature-version/universe-continent-up-left-lv0.png"),
-    1: require("../../assets/universe-nature-version/universe-continent-up-left-lv1.png"),
-    2: require("../../assets/universe-nature-version/universe-continent-up-left-lv2.png"),
-    3: require("../../assets/universe-nature-version/universe-continent-up-left-lv3.png"),
-    4: require("../../assets/universe-nature-version/universe-continent-up-left-lv4.png"),
-    5: require("../../assets/universe-nature-version/universe-continent-up-left-lv5.png"),
-    6: require("../../assets/universe-nature-version/universe-continent-up-left-lv6.png")
-  },
-  "up-right": {
-    0: require("../../assets/universe-nature-version/universe-continent-up-right-lv0.png"),
-    1: require("../../assets/universe-nature-version/universe-continent-up-right-lv1.png"),
-    2: require("../../assets/universe-nature-version/universe-continent-up-right-lv2.png"),
-    3: require("../../assets/universe-nature-version/universe-continent-up-right-lv3.png"),
-    4: require("../../assets/universe-nature-version/universe-continent-up-right-lv4.png"),
-    5: require("../../assets/universe-nature-version/universe-continent-up-right-lv5.png"),
-    6: require("../../assets/universe-nature-version/universe-continent-up-right-lv6.png")
-  },
-  "down-right": {
-    0: require("../../assets/universe-nature-version/universe-continent-down-right-lv0.png"),
-    1: require("../../assets/universe-nature-version/universe-continent-down-right-lv1.png"),
-    2: require("../../assets/universe-nature-version/universe-continent-down-right-lv2.png"),
-    3: require("../../assets/universe-nature-version/universe-continent-down-right-lv3.png"),
-    4: require("../../assets/universe-nature-version/universe-continent-down-right-lv4.png"),
-    5: require("../../assets/universe-nature-version/universe-continent-down-right-lv5.png"),
-    6: require("../../assets/universe-nature-version/universe-continent-down-right-lv6.png")
-  },
-  "down-left": {
-    0: require("../../assets/universe-nature-version/universe-continent-down-left-lv0.png"),
-    1: require("../../assets/universe-nature-version/universe-continent-down-left-lv1.png"),
-    2: require("../../assets/universe-nature-version/universe-continent-down-left-lv2.png"),
-    3: require("../../assets/universe-nature-version/universe-continent-down-left-lv3.png"),
-    4: require("../../assets/universe-nature-version/universe-continent-down-left-lv4.png"),
-    5: require("../../assets/universe-nature-version/universe-continent-down-left-lv5.png"),
-    6: require("../../assets/universe-nature-version/universe-continent-down-left-lv6.png")
-  }
-};
-
-const CONTINENT_CANVAS_SIZE = 1254;
 
 type ContinentBounds = {
   x: number;
@@ -394,51 +74,6 @@ type ContinentBounds = {
   height: number;
 };
 
-const continentLayerTargets: Partial<Record<(typeof continentLayerOrder)[number], ContinentBounds>> = {
-  "up-left": { x: 0.18, y: 0.15, width: 0.34, height: 0.39 },
-  "up-right": { x: 0.48, y: 0.16, width: 0.32, height: 0.38 },
-  "down-right": { x: 0.39, y: 0.47, width: 0.37, height: 0.33 },
-  "down-left": { x: 0.20, y: 0.50, width: 0.25, height: 0.30 }
-};
-
-const continentAlphaBounds: Partial<Record<(typeof continentLayerOrder)[number], Record<ContinentLevel, ContinentBounds>>> = {
-  "up-left": {
-    0: { x: 163, y: 52, width: 924, height: 1123 },
-    1: { x: 118, y: 60, width: 1045, height: 1117 },
-    2: { x: 128, y: 60, width: 1032, height: 1107 },
-    3: { x: 126, y: 55, width: 1034, height: 1108 },
-    4: { x: 106, y: 39, width: 1054, height: 1126 },
-    5: { x: 104, y: 35, width: 1056, height: 1132 },
-    6: { x: 106, y: 40, width: 1054, height: 1127 }
-  },
-  "up-right": {
-    0: { x: 170, y: 87, width: 926, height: 1098 },
-    1: { x: 701, y: 201, width: 368, height: 438 },
-    2: { x: 204, y: 134, width: 894, height: 1024 },
-    3: { x: 79, y: 0, width: 1097, height: 1254 },
-    4: { x: 128, y: 62, width: 998, height: 1135 },
-    5: { x: 133, y: 55, width: 995, height: 1134 },
-    6: { x: 121, y: 25, width: 1055, height: 1201 }
-  },
-  "down-right": {
-    0: { x: 493, y: 591, width: 524, height: 464 },
-    1: { x: 123, y: 163, width: 1103, height: 985 },
-    2: { x: 101, y: 118, width: 1139, height: 1018 },
-    3: { x: 74, y: 109, width: 1152, height: 1036 },
-    4: { x: 138, y: 131, width: 1047, height: 985 },
-    5: { x: 123, y: 128, width: 1076, height: 1012 },
-    6: { x: 112, y: 112, width: 1083, height: 1030 }
-  },
-  "down-left": {
-    0: { x: 141, y: 573, width: 311, height: 381 },
-    1: { x: 141, y: 573, width: 311, height: 381 },
-    2: { x: 141, y: 573, width: 311, height: 381 },
-    3: { x: 141, y: 573, width: 311, height: 381 },
-    4: { x: 141, y: 573, width: 311, height: 381 },
-    5: { x: 141, y: 573, width: 311, height: 381 },
-    6: { x: 141, y: 573, width: 311, height: 381 }
-  }
-};
 
 const moodBiomeMap: Record<Mood, MoodBiome> = {
   calm: "calm",
@@ -489,8 +124,8 @@ function monthKeyForDate(value: string | Date) {
 
 function normalizeUniverseCategory(category: EntryCategory | null): UniverseCategory | null {
   if (!category || category === "other") return null;
-  if (category === "relationship" || category === "relationships" || category === "love" || category === "family") return "relationship";
-  if (category === "selfDiscipline" || category === "habit" || category === "attitude" || category === "dream") return "self-discipline";
+  if (category === "relationship") return "relationship";
+  if (category === "selfDiscipline") return "self-discipline";
   if (category === "work" || category === "taste" || category === "wealth" || category === "health") return category;
   return null;
 }
@@ -597,22 +232,15 @@ function visibleContinents(continents: ContinentSlice[], rotationIndex: number) 
 }
 
 function latestMonthKey(entries: Entry[]) {
-  if (!entries.length) return monthKeyForDate(new Date());
+  const currentMonthKey = monthKeyForDate(new Date());
+  if (!entries.length) return currentMonthKey;
   const latest = [...entries].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-  return monthKeyForDate(latest.createdAt);
+  const latestEntryMonthKey = monthKeyForDate(latest.createdAt);
+  return latestEntryMonthKey > currentMonthKey ? currentMonthKey : latestEntryMonthKey;
 }
 
 function entriesInMonth(entries: Entry[], monthKey: string) {
   return entries.filter((entry) => dateKey(entry.createdAt).startsWith(monthKey));
-}
-
-function continentDevelopmentLevel(entries: Entry[]): UniverseContinentLevel {
-  if (entries.length <= 1) return "bare";
-  if (entries.length < 5) return 1;
-  if (entries.length < 8) return 2;
-  if (entries.length < 12) return 3;
-  if (entries.length < 15) return 4;
-  return 5;
 }
 
 function activeV4Levels(count: number): V4Level[] {
@@ -621,6 +249,14 @@ function activeV4Levels(count: number): V4Level[] {
   if (count >= 4) return [1, 2];
   if (count >= 1) return [1];
   return [];
+}
+
+function v4LevelLabel(count: number) {
+  if (count >= 10) return "Lv.Max";
+  if (count >= 7) return "Lv.3";
+  if (count >= 4) return "Lv.2";
+  if (count >= 1) return "Lv.1";
+  return "Lv.0";
 }
 
 function emotionLayerForEntries(entries: Entry[]) {
@@ -667,15 +303,6 @@ function moodGroupCounts(entries: Entry[]) {
     return acc;
   }, { positive: 0, neutral: 0, negative: 0 });
 }
-
-const v3ContinentFrames: Record<UniverseContinentRank, ContinentBounds> = {
-  1: { x: 0.08, y: 0.13, width: 0.39, height: 0.28 },
-  2: { x: 0.53, y: 0.14, width: 0.38, height: 0.27 },
-  3: { x: 0.08, y: 0.42, width: 0.36, height: 0.25 },
-  4: { x: 0.56, y: 0.42, width: 0.35, height: 0.25 },
-  5: { x: 0.16, y: 0.68, width: 0.32, height: 0.22 },
-  6: { x: 0.54, y: 0.69, width: 0.31, height: 0.21 }
-};
 
 const V4_PLANET_WIDTH = 1126;
 const V4_PLANET_HEIGHT = 1397;
@@ -909,6 +536,37 @@ const v4Assets: Record<V4Category, Record<V4Level, Partial<Record<V4AssetSide, V
   }
 };
 
+const v4PlanetImageAssets = Array.from(new Set([
+  v4BackgroundAsset,
+  v4BarePlanetAsset,
+  ...v4DecoAssets.map((asset) => asset.source),
+  ...Object.values(v4MoodDecoAssets).flatMap((assets) => assets.map((asset) => asset.source)),
+  v4StreetlightMoodAsset.source,
+  ...Object.values(v4Assets).flatMap((levels) =>
+    Object.values(levels).flatMap((sides) =>
+      Object.values(sides).flatMap((asset) => asset ? [asset.source] : [])
+    )
+  )
+].filter((source): source is number => typeof source === "number")));
+
+let v4PlanetAssetsLoaded = false;
+let v4PlanetAssetsLoadPromise: Promise<void> | null = null;
+
+function preloadV4PlanetAssets() {
+  if (v4PlanetAssetsLoaded) return Promise.resolve();
+  if (!v4PlanetAssetsLoadPromise) {
+    v4PlanetAssetsLoadPromise = Asset.loadAsync(v4PlanetImageAssets)
+      .then(() => {
+        v4PlanetAssetsLoaded = true;
+      })
+      .catch((error) => {
+        v4PlanetAssetsLoadPromise = null;
+        throw error;
+      });
+  }
+  return v4PlanetAssetsLoadPromise;
+}
+
 const v4Slots: Record<V4SlotKey, V4SlotSpec> = {
   land_01: {
     key: "land_01",
@@ -969,6 +627,11 @@ const v4Slots: Record<V4SlotKey, V4SlotSpec> = {
 };
 
 const v4RankSlots: V4SlotKey[] = ["land_01", "land_02", "land_03", "land_04", "land_05", "land_06"];
+const v4EtcHitZones: ContinentBounds[] = [
+  { x: 350, y: 260, width: 105, height: 165 },
+  { x: 425, y: 400, width: 155, height: 225 },
+  { x: 500, y: 610, width: 370, height: 315 }
+];
 
 const workV4Placements: Partial<Record<V4SlotKey, V4PlacementSpec>> = {
     land_01: {
@@ -1228,21 +891,6 @@ const v4CategoryPlacements: Partial<Record<UniverseCategory, Partial<Record<V4Sl
   health: adjustV4Placements(healthV4Placements, finalV4PlacementAdjustments.health)
 };
 
-function continentAssetSource(rank: UniverseContinentRank, category: UniverseCategory, level: UniverseContinentLevel) {
-  if (level === "bare") return v3ContinentBareAssets[rank];
-  return v3ContinentAssets[rank][category][level];
-}
-
-function continentLayerFrame(rank: UniverseContinentRank, visualSize: number) {
-  const target = v3ContinentFrames[rank];
-  return {
-    left: target.x * visualSize,
-    top: target.y * visualSize,
-    width: target.width * visualSize,
-    height: target.height * visualSize
-  };
-}
-
 function v4AssetFor(category: V4Category, level: V4Level, side: V4AssetSide) {
   const levelAssets = v4Assets[category][level];
   return levelAssets[side] || levelAssets.center || levelAssets.right || levelAssets.left;
@@ -1250,10 +898,21 @@ function v4AssetFor(category: V4Category, level: V4Level, side: V4AssetSide) {
 
 function v4PlacementFor(category: V4Category, slot: V4SlotSpec): V4PlacementSpec {
   const categoryPlacement = category === "etc" ? undefined : v4CategoryPlacements[category]?.[slot.key];
-  return categoryPlacement || {
+  const placement = categoryPlacement || {
     levelCenters: slot.levelCenters,
     sides: { 1: slot.lv1Side, 2: slot.assetSide, 3: slot.assetSide, 4: slot.assetSide },
     areaRatio: slot.areaRatio
+  };
+  if (slot.key !== "land_03") return placement;
+  return {
+    ...placement,
+    levelCenters: {
+      ...placement.levelCenters,
+      2: {
+        ...placement.levelCenters[2],
+        x: placement.levelCenters[2].x - 35
+      }
+    }
   };
 }
 
@@ -1279,11 +938,15 @@ function v4LayerFrame(slot: V4SlotSpec, placement: V4PlacementSpec, asset: V4Ass
 }
 
 function v4SlotFrame(slot: V4SlotSpec, visualWidth: number, visualHeight: number) {
+  return v4BoundsFrame(slot.box, visualWidth, visualHeight);
+}
+
+function v4BoundsFrame(bounds: ContinentBounds, visualWidth: number, visualHeight: number) {
   return {
-    left: (slot.box.x / V4_PLANET_WIDTH) * visualWidth,
-    top: (slot.box.y / V4_PLANET_HEIGHT) * visualHeight,
-    width: (slot.box.width / V4_PLANET_WIDTH) * visualWidth,
-    height: (slot.box.height / V4_PLANET_HEIGHT) * visualHeight
+    left: (bounds.x / V4_PLANET_WIDTH) * visualWidth,
+    top: (bounds.y / V4_PLANET_HEIGHT) * visualHeight,
+    width: (bounds.width / V4_PLANET_WIDTH) * visualWidth,
+    height: (bounds.height / V4_PLANET_HEIGHT) * visualHeight
   };
 }
 
@@ -1400,12 +1063,18 @@ function buildScenarioEntries(scenarioIndex: number, monthKey: string): Entry[] 
   return entries;
 }
 
-export function UniverseScreen({ entries }: Props) {
+export function UniverseScreen({ entries, guestEntryCount = 0, isLoggedIn, loginLoading, onLogin }: Props) {
   const [rotationIndex, setRotationIndex] = useState(0);
-  const [selectedContinentKey, setSelectedContinentKey] = useState<UniverseCategory | null>(null);
+  const [selectedCategoryKey, setSelectedCategoryKey] = useState<V4Category | null>(null);
   const [selectedMonthKey, setSelectedMonthKey] = useState(() => latestMonthKey(entries));
-  const [scenarioIndex, setScenarioIndex] = useState<number | null>(10);
+  const [scenarioIndex, setScenarioIndex] = useState<number | null>(null);
   const [savingPlanet, setSavingPlanet] = useState(false);
+  const [captureMode, setCaptureMode] = useState(false);
+  const [bgmEnabled, setBgmEnabled] = useState<boolean | null>(null);
+  const [planetAssetsMounted, setPlanetAssetsMounted] = useState(v4PlanetAssetsLoaded);
+  const [planetReady, setPlanetReady] = useState(v4PlanetAssetsLoaded);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const bgmPlayer = useAudioPlayer(planetBgmAsset);
   const { width } = useWindowDimensions();
   const saveTargetRef = useRef<View | null>(null);
   const monthKeys = useMemo(() => availableMonthKeys(entries), [entries]);
@@ -1419,8 +1088,85 @@ export function UniverseScreen({ entries }: Props) {
   );
   const data = useMemo(() => buildUniverse(monthEntries), [monthEntries]);
   const continents = useMemo(() => topContinents(data), [data]);
-  const selectedContinent = continents.find((continent) => continent.key === selectedContinentKey) || null;
+  const selectedContinent = selectedCategoryKey === "etc"
+    ? null
+    : continents.find((continent) => continent.key === selectedCategoryKey) || null;
+  const selectedCategoryEntries = selectedCategoryKey === "etc" ? data.etcEntries : selectedContinent?.entries || [];
+  const categoryButtons = [
+    ...continentMeta.map((continent) => ({
+      key: continent.key as V4Category,
+      label: continent.label,
+      entries: data.categories.get(continent.key) || []
+    })),
+    { key: "etc" as V4Category, label: "기타", entries: data.etcEntries }
+  ]
+    .map((category) => ({ ...category, count: category.entries.length }))
+    .filter((category) => category.count > 0)
+    .sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      const lastEntryTime = (categoryEntries: Entry[]) => categoryEntries.length
+        ? Math.max(...categoryEntries.map((entry) => new Date(entry.createdAt).getTime()))
+        : Number.MAX_SAFE_INTEGER;
+      return lastEntryTime(a.entries) - lastEntryTime(b.entries) || a.label.localeCompare(b.label, "ko");
+    });
   const planetSize = Math.min(width - 24, 390);
+  const topCategoryLabel = categoryButtons[0]?.label || null;
+  const footerHeight = canUseDevTools && scenarioIndex !== null ? 112 : 0;
+  const minimumCaptureHeight = planetSize * (V4_PLANET_HEIGHT / V4_PLANET_WIDTH) + 76;
+  const captureFrameHeight = viewportHeight
+    ? Math.max(minimumCaptureHeight, viewportHeight - footerHeight)
+    : minimumCaptureHeight;
+  const isCurrentMonth = selectedMonthKey >= monthKeyForDate(new Date());
+
+  useEffect(() => {
+    bgmPlayer.loop = true;
+    bgmPlayer.volume = 0.55;
+  }, [bgmPlayer]);
+
+  useEffect(() => {
+    if (v4PlanetAssetsLoaded) return;
+    let active = true;
+    let revealTimer: ReturnType<typeof setTimeout> | null = null;
+    preloadV4PlanetAssets()
+      .catch((error) => {
+        console.warn("Planet asset preload failed", error);
+      })
+      .finally(() => {
+        if (!active) return;
+        setPlanetAssetsMounted(true);
+        revealTimer = setTimeout(() => {
+          if (active) setPlanetReady(true);
+        }, 700);
+      });
+    return () => {
+      active = false;
+      if (revealTimer) clearTimeout(revealTimer);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    AsyncStorage.getItem(PLANET_BGM_ENABLED_KEY)
+      .then((value) => {
+        if (active) setBgmEnabled(value === "true");
+      })
+      .catch(() => {
+        if (active) setBgmEnabled(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (bgmEnabled === null) return;
+    try {
+      if (bgmEnabled) bgmPlayer.play();
+      else bgmPlayer.pause();
+    } catch (error) {
+      console.warn("Planet BGM state update failed", error);
+    }
+  }, [bgmEnabled, bgmPlayer]);
 
   useEffect(() => {
     setSelectedMonthKey((current) => monthKeys.includes(current) ? current : latestMonthKey(entries));
@@ -1433,8 +1179,11 @@ export function UniverseScreen({ entries }: Props) {
     });
   };
   const changeMonth = (direction: number) => {
-    setSelectedMonthKey((current) => shiftMonth(current, direction));
-    setSelectedContinentKey(null);
+    setSelectedMonthKey((current) => {
+      if (direction > 0 && current >= monthKeyForDate(new Date())) return current;
+      return shiftMonth(current, direction);
+    });
+    setSelectedCategoryKey(null);
     setRotationIndex(0);
   };
   const changeScenario = (direction: number) => {
@@ -1442,8 +1191,15 @@ export function UniverseScreen({ entries }: Props) {
       const base = current ?? 0;
       return (base + direction + universeScenarios.length) % universeScenarios.length;
     });
-    setSelectedContinentKey(null);
+    setSelectedCategoryKey(null);
     setRotationIndex(0);
+  };
+  const toggleBgm = () => {
+    const next = !(bgmEnabled ?? false);
+    setBgmEnabled(next);
+    AsyncStorage.setItem(PLANET_BGM_ENABLED_KEY, String(next)).catch((error) => {
+      console.warn("Planet BGM preference save failed", error);
+    });
   };
   const savePlanetImage = async () => {
     const target = saveTargetRef.current;
@@ -1451,12 +1207,21 @@ export function UniverseScreen({ entries }: Props) {
     setSavingPlanet(true);
     try {
       const MediaLibrary = require("expo-media-library") as typeof import("expo-media-library");
-      const permission = await MediaLibrary.requestPermissionsAsync();
+      const permission = await MediaLibrary.requestPermissionsAsync(true);
       if (!permission.granted) {
-        Alert.alert("사진 저장 권한이 필요해.");
+        Alert.alert(
+          "사진 저장 권한이 필요해",
+          "아이폰 설정에서 Log Planet의 사진 추가 권한을 허용해줘.",
+          [
+            { text: "나중에", style: "cancel" },
+            { text: "설정 열기", onPress: () => void Linking.openSettings() }
+          ]
+        );
         return;
       }
       const { captureRef } = require("react-native-view-shot") as typeof import("react-native-view-shot");
+      setCaptureMode(true);
+      await new Promise((resolve) => setTimeout(resolve, 100));
       const uri = await captureRef(target, {
         format: "png",
         quality: 1,
@@ -1468,45 +1233,117 @@ export function UniverseScreen({ entries }: Props) {
       console.warn("Planet image save failed", error);
       Alert.alert("이미지 저장 실패", "잠시 후 다시 시도해줘.");
     } finally {
+      setCaptureMode(false);
       setSavingPlanet(false);
     }
   };
 
   return (
-    <View style={styles.root}>
-      <View style={styles.universeToolbar}>
-        <Pressable style={styles.monthButton} onPress={() => changeMonth(-1)}>
-          <Text style={styles.monthButtonText}>‹</Text>
-        </Pressable>
-        <View style={styles.monthTitleWrap}>
-          <Text style={styles.monthTitle}>{monthLabelFromKey(selectedMonthKey)}</Text>
-          <Text style={styles.monthSubtitle}>{scenarioIndex === null ? `기록 ${monthEntries.length}개` : universeScenarios[scenarioIndex].title}</Text>
-        </View>
-        <Pressable style={styles.monthButton} onPress={() => changeMonth(1)}>
-          <Text style={styles.monthButtonText}>›</Text>
-        </Pressable>
-        <Pressable style={[styles.savePlanetButton, savingPlanet && styles.disabledButton]} onPress={savePlanetImage} disabled={savingPlanet}>
-          <Text style={styles.savePlanetText}>{savingPlanet ? "저장 중" : "공유하기"}</Text>
-        </Pressable>
-      </View>
+    <View
+      style={styles.root}
+      onLayout={(event) => setViewportHeight(event.nativeEvent.layout.height)}
+    >
       <View style={styles.planetOnlyWrap}>
-        <View collapsable={false} ref={saveTargetRef} style={styles.planetCaptureCard}>
-          <Text style={styles.captureMonthLabel}>{monthLabelFromKey(selectedMonthKey)}</Text>
-          {scenarioIndex !== null ? (
-            <Text style={styles.captureScenarioLabel}>{scenarioIndex + 1}. {universeScenarios[scenarioIndex].title}</Text>
+        <View collapsable={false} ref={saveTargetRef} style={[styles.planetCaptureCard, { height: captureFrameHeight }]}>
+          {planetAssetsMounted ? (
+            <>
+              <Image source={v4BackgroundAsset} style={styles.captureBackgroundImage} resizeMode="cover" />
+              <PlanetIllustration
+                size={planetSize}
+                data={data}
+                continents={continents}
+                rotationIndex={rotationIndex}
+                onRotate={rotatePlanet}
+                onOpenContinent={setSelectedCategoryKey}
+                enableContinentHits
+                showChrome={false}
+                showZoomControls={!captureMode}
+                showBackground={false}
+                zoomBottomInset={scenarioIndex === null && categoryButtons.length ? 48 : 0}
+              />
+              <View style={styles.universeToolbar}>
+            <Pressable
+              style={[
+                styles.captureButton,
+                styles.bgmButtonFloating,
+                captureMode && styles.captureHiddenControl,
+                bgmEnabled === false && styles.bgmButtonOff
+              ]}
+              onPress={toggleBgm}
+              disabled={captureMode || bgmEnabled === null}
+              accessibilityRole="button"
+              accessibilityLabel={bgmEnabled === false ? "행성 배경음악 켜기" : "행성 배경음악 끄기"}
+              accessibilityState={{ checked: bgmEnabled === true, disabled: captureMode || bgmEnabled === null }}
+            >
+              <Text style={[styles.bgmNote, bgmEnabled === false && styles.bgmNoteOff]}>♫</Text>
+              {bgmEnabled === false ? <View pointerEvents="none" style={styles.bgmMutedSlash} /> : null}
+            </Pressable>
+            <View style={styles.monthNavigationGroup}>
+              <Pressable
+                style={[styles.monthButton, captureMode && styles.captureHiddenControl]}
+                onPress={() => changeMonth(-1)}
+                disabled={captureMode}
+                accessibilityLabel="이전 달"
+              >
+                <Text style={styles.monthButtonText}>‹</Text>
+              </Pressable>
+              <Pressable
+                style={styles.monthTitleWrap}
+                onLongPress={canUseDevTools ? () => setScenarioIndex(0) : undefined}
+                delayLongPress={900}
+              >
+                <Text style={styles.monthTitle}>{monthLabelFromKey(selectedMonthKey)}</Text>
+                <Text
+                  style={styles.monthSubtitleLine}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.72}
+                >
+                  <Text style={styles.monthSubtitle}>기록 {monthEntries.length}개</Text>
+                  {topCategoryLabel ? (
+                    <Text style={styles.monthTopCategory}> · {topCategoryLabel}의 기록이 가장 많은 달</Text>
+                  ) : null}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.monthButton,
+                  isCurrentMonth && styles.monthButtonDisabled,
+                  captureMode && styles.captureHiddenControl
+                ]}
+                onPress={() => changeMonth(1)}
+                disabled={captureMode || isCurrentMonth}
+                accessibilityLabel="다음 달"
+                accessibilityState={{ disabled: captureMode || isCurrentMonth }}
+              >
+                <Text style={[styles.monthButtonText, isCurrentMonth && styles.monthButtonTextDisabled]}>›</Text>
+              </Pressable>
+            </View>
+            <Pressable
+              style={[styles.captureButton, styles.captureButtonFloating, (savingPlanet || captureMode) && styles.disabledButton, captureMode && styles.captureHiddenControl]}
+              onPress={savePlanetImage}
+              disabled={savingPlanet || captureMode}
+              accessibilityLabel="행성 이미지 캡처"
+            >
+              <Text style={styles.captureCorners}>⌗</Text>
+              <Text style={styles.captureCamera}>📷</Text>
+            </Pressable>
+              </View>
+            </>
           ) : null}
-          <PlanetIllustration
-            size={planetSize}
-            data={data}
-            continents={continents}
-            rotationIndex={rotationIndex}
-            onRotate={rotatePlanet}
-            onOpenContinent={setSelectedContinentKey}
-            enableContinentHits
-            showChrome={false}
-          />
+          {!planetReady ? (
+            <View
+              style={styles.planetLoadingOverlay}
+              accessibilityRole="progressbar"
+              accessibilityLiveRegion="polite"
+              accessibilityLabel="기록 행성 로딩 중"
+            >
+              <ActivityIndicator size="small" color="#bfe0ff" />
+              <Text style={styles.planetLoadingText}>기록 행성 로딩 중...</Text>
+            </View>
+          ) : null}
         </View>
-        <View style={styles.scenarioNavigator}>
+        {canUseDevTools && scenarioIndex !== null ? <View style={styles.scenarioNavigator}>
           <Pressable
             style={styles.scenarioArrowButton}
             onPress={() => changeScenario(-1)}
@@ -1517,7 +1354,7 @@ export function UniverseScreen({ entries }: Props) {
             style={styles.scenarioTitleButton}
             onPress={() => {
               setScenarioIndex((current) => current === null ? 0 : null);
-              setSelectedContinentKey(null);
+              setSelectedCategoryKey(null);
               setRotationIndex(0);
             }}
           >
@@ -1529,8 +1366,8 @@ export function UniverseScreen({ entries }: Props) {
           <Pressable style={styles.scenarioArrowButton} onPress={() => changeScenario(1)}>
             <Text style={styles.scenarioArrowText}>›</Text>
           </Pressable>
-        </View>
-        {scenarioIndex !== null ? (
+        </View> : null}
+        {canUseDevTools && scenarioIndex !== null ? (
           <View style={styles.scenarioCountStrip}>
             {(Object.entries(universeScenarios[scenarioIndex].counts) as Array<[V4Category, number]>).map(([category, count]) => (
               <View key={category} style={styles.scenarioCountItem}>
@@ -1538,32 +1375,51 @@ export function UniverseScreen({ entries }: Props) {
               </View>
             ))}
           </View>
-        ) : (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scenarioStrip}>
-            {universeScenarios.map((scenario, index) => (
-            <Pressable
-              key={scenario.title}
-              style={styles.scenarioChip}
-              onPress={() => {
-                setScenarioIndex(index);
-                setSelectedContinentKey(null);
-                setRotationIndex(0);
-              }}
-            >
-              <Text style={styles.scenarioChipText}>{index + 1}. {scenario.title}</Text>
-            </Pressable>
+        ) : null}
+        {scenarioIndex === null && categoryButtons.length ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.categoryButtonScroller}
+            contentContainerStyle={styles.categoryButtonStrip}
+          >
+            {categoryButtons.map((category) => (
+              <Pressable
+                key={category.key}
+                style={styles.categoryButton}
+                onPress={() => setSelectedCategoryKey(category.key)}
+              >
+                <Text style={styles.categoryButtonLabel}>{category.label}</Text>
+                <Text style={styles.categoryButtonCount}>{category.count}</Text>
+              </Pressable>
             ))}
           </ScrollView>
-        )}
+        ) : null}
+        {!isLoggedIn && guestEntryCount > 0 && scenarioIndex === null ? (
+          <View style={[styles.guestLoginPrompt, { bottom: categoryButtons.length ? 54 : 10 }]}>
+            <View style={styles.guestLoginCopy}>
+              <Text style={styles.guestLoginTitle}>나의 기록 행성을 확인하고 싶다면?</Text>
+              <Text style={styles.guestLoginDescription}>로그인 하면 내 기록을 안전하게 보관하고 행성으로 불러올 수 있어.</Text>
+            </View>
+            <Pressable
+              disabled={loginLoading}
+              style={[styles.guestLoginButton, loginLoading && styles.disabledButton]}
+              onPress={onLogin}
+            >
+              <Text style={styles.guestLoginButtonText}>{loginLoading ? "연결 중" : "로그인"}</Text>
+            </Pressable>
+          </View>
+        ) : null}
       </View>
-      {selectedContinent ? (
+      {selectedCategoryKey && selectedCategoryEntries.length > 0 ? (
         <ContinentInsightOverlay
-          continent={selectedContinent}
+          categoryKey={selectedCategoryKey}
+          entries={selectedCategoryEntries}
           continents={continents}
-          rank={continents.findIndex((continent) => continent.key === selectedContinent.key) + 1}
-          assetRank={(Math.max(0, continents.findIndex((continent) => continent.key === selectedContinent.key)) + 1) as UniverseContinentRank}
-          monthKey={selectedMonthKey}
-          onClose={() => setSelectedContinentKey(null)}
+          data={data}
+          assetRank={(selectedCategoryKey === "etc" ? 1 : Math.max(0, continents.findIndex((continent) => continent.key === selectedCategoryKey)) + 1) as UniverseContinentRank}
+          viewportWidth={width}
+          onClose={() => setSelectedCategoryKey(null)}
         />
       ) : null}
     </View>
@@ -1622,7 +1478,7 @@ function UniverseHome({
   rotationIndex: number;
   onRotate: (direction: number) => void;
   onOpenPlanet: () => void;
-  onOpenContinent: (category: UniverseCategory) => void;
+  onOpenContinent: (category: V4Category) => void;
 }) {
   return (
     <>
@@ -1689,7 +1545,7 @@ function PlanetDetail({
   planetSize: number;
   rotationIndex: number;
   onRotate: (direction: number) => void;
-  onOpenContinent: (category: UniverseCategory) => void;
+  onOpenContinent: (category: V4Category) => void;
 }) {
   const biomeCounts = topBiomeEntries([...data.categories.values()].flat());
 
@@ -1801,83 +1657,71 @@ function ContinentDetail({
 }
 
 function ContinentInsightOverlay({
-  continent,
+  categoryKey,
+  entries,
   continents,
-  rank,
+  data,
   assetRank,
-  monthKey,
+  viewportWidth,
   onClose
 }: {
-  continent: ContinentSlice;
+  categoryKey: V4Category;
+  entries: Entry[];
   continents: ContinentSlice[];
-  rank: number;
+  data: ReturnType<typeof buildUniverse>;
   assetRank: UniverseContinentRank;
-  monthKey: string;
+  viewportWidth: number;
   onClose: () => void;
 }) {
-  const monthEntries = entriesInMonth(continent.entries, monthKey);
-  const level = continentDevelopmentLevel(monthEntries);
-  const average = averageEnergy(continent.entries);
-  const moodCounts = moodGroupCounts(continent.entries);
-  const energyRank = continentEnergyRank(continents, continent);
-  const comment = continentComment(continent, rank, energyRank);
-  const source = continentAssetSource(assetRank, continent.key, level);
+  const meta = categoryKey === "etc"
+    ? { name: "기타 영역", label: "기타" }
+    : continentMeta.find((item) => item.key === categoryKey) || { name: "기록 영역", label: "기록" };
+  const moodCounts = moodGroupCounts(entries);
+  const sortedEntries = [...entries]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const groups: Array<{ key: MoodGroup; label: string; color: string }> = [
     { key: "positive", label: "긍정", color: "#dfe8ff" },
-    { key: "neutral", label: "중간", color: "#91a7d8" },
+    { key: "neutral", label: "중립", color: "#91a7d8" },
     { key: "negative", label: "부정", color: "#33456f" }
   ];
 
   return (
     <View style={styles.continentOverlay}>
-      <Pressable style={styles.continentDim} onPress={onClose} />
-      <View style={styles.continentSheet}>
-        <View style={styles.continentSheetHeader}>
-          <Text style={styles.continentSheetKicker}>대륙 상세</Text>
-          <Pressable style={styles.continentCloseButton} onPress={onClose}>
-            <Text style={styles.continentCloseText}>×</Text>
-          </Pressable>
-        </View>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.continentSheetScroll}>
-          <View style={styles.detailContinentFrame}>
-            <Image
-              source={source}
-              style={styles.detailContinentImage}
-              resizeMode="contain"
-            />
-          </View>
+      <View style={styles.categoryCloseupHeader}>
+        <Text style={styles.continentSheetKicker}>{meta.name}</Text>
+        <Pressable style={styles.continentCloseButton} onPress={onClose} accessibilityLabel="상세 보기 닫기">
+          <Text style={styles.continentCloseText}>×</Text>
+        </Pressable>
+      </View>
+      <CategoryPlanetCloseup
+        categoryKey={categoryKey}
+        assetRank={assetRank}
+        data={data}
+        continents={continents}
+        viewportWidth={viewportWidth}
+      />
+      <View style={styles.categoryDetailPanel}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.categoryDetailScroll}>
           <View style={styles.detailTitleRow}>
             <View>
-              <Text style={styles.detailLevelText}>{level === "bare" ? "Bare" : `Lv.${level}`}</Text>
-              <Text style={styles.detailCategoryText}>{continent.name} · {continent.label}</Text>
+              <Text style={styles.detailLevelText}>기록 카테고리</Text>
+              <View style={styles.detailCategoryHeadingRow}>
+                <Text style={styles.detailCategoryText}>{meta.label}</Text>
+                <View style={styles.detailLevelBadge}>
+                  <Text style={styles.detailLevelBadgeText}>{v4LevelLabel(entries.length)}</Text>
+                </View>
+              </View>
             </View>
             <View style={styles.detailCountPill}>
-              <Text style={styles.detailCountValue}>{continent.count}</Text>
+              <Text style={styles.detailCountValue}>{entries.length}</Text>
               <Text style={styles.detailCountLabel}>기록</Text>
             </View>
           </View>
-
           <View style={styles.detailMetricCard}>
-            <Text style={styles.detailMetricLabel}>평균 사용 에너지</Text>
-            <Text style={styles.detailMetricValue}>{average}%</Text>
-            <View style={styles.energySpectrum}>
-              <View style={[styles.energySpectrumSegment, { backgroundColor: "rgba(188, 205, 255, 0.52)" }]} />
-              <View style={[styles.energySpectrumSegment, { backgroundColor: "rgba(126, 151, 222, 0.72)" }]} />
-              <View style={[styles.energySpectrumSegment, { backgroundColor: "rgba(53, 72, 125, 0.92)" }]} />
-              <View style={[styles.energyMarker, { left: `${Math.max(0, Math.min(100, average))}%` }]} />
-            </View>
-            <View style={styles.energySpectrumLabels}>
-              <Text style={styles.energySpectrumLabel}>0</Text>
-              <Text style={styles.energySpectrumLabel}>50</Text>
-              <Text style={styles.energySpectrumLabel}>100</Text>
-            </View>
-          </View>
-
-          <View style={styles.detailMetricCard}>
-            <Text style={styles.detailMetricLabel}>감정 비중</Text>
+            <Text style={styles.detailMetricLabel}>긍정 · 중립 · 부정 비율</Text>
             <View style={styles.moodShareList}>
               {groups.map((group) => {
-                const value = percent(moodCounts[group.key], Math.max(1, continent.entries.length));
+                const value = percent(moodCounts[group.key], Math.max(1, entries.length));
                 return (
                   <View key={group.key} style={styles.moodShareRow}>
                     <Text style={styles.moodShareLabel}>{group.label}</Text>
@@ -1890,12 +1734,65 @@ function ContinentInsightOverlay({
               })}
             </View>
           </View>
-
-          <View style={styles.commentCard}>
-            <Text style={styles.commentTitle}>코멘트</Text>
-            <Text style={styles.commentText}>{comment}</Text>
-          </View>
+          <Text style={styles.recentRecordsTitle}>전체 기록 {entries.length}개</Text>
+          {sortedEntries.map((entry) => (
+            <View key={entry.id} style={styles.detailRecordCard}>
+              <Text style={styles.detailRecordDate}>{formatDate(entry.createdAt)}</Text>
+              <Text style={styles.detailRecordText} numberOfLines={3}>{entry.text}</Text>
+            </View>
+          ))}
+          {!sortedEntries.length ? <Text style={styles.detailEmptyText}>이 카테고리에 아직 기록이 없어.</Text> : null}
         </ScrollView>
+      </View>
+    </View>
+  );
+}
+
+function CategoryPlanetCloseup({
+  categoryKey,
+  assetRank,
+  data,
+  continents,
+  viewportWidth
+}: {
+  categoryKey: V4Category;
+  assetRank: UniverseContinentRank;
+  data: ReturnType<typeof buildUniverse>;
+  continents: ContinentSlice[];
+  viewportWidth: number;
+}) {
+  const slotKey = categoryKey === "etc" ? "etc_lake" : v4RankSlots[assetRank - 1];
+  const slot = v4Slots[slotKey];
+  const viewportHeight = Math.min(320, viewportWidth * 0.72);
+  const renderWidth = viewportWidth * 1.72;
+  const renderHeight = renderWidth * (V4_PLANET_HEIGHT / V4_PLANET_WIDTH);
+  const stageHeight = renderHeight + 76;
+  const focusX = ((slot.box.x + slot.box.width / 2) / V4_PLANET_WIDTH) * renderWidth;
+  const focusY = 38 + ((slot.box.y + slot.box.height / 2) / V4_PLANET_HEIGHT) * renderHeight;
+  const focusTopOffset = categoryKey !== "etc" && ([1, 2, 3, 6] as UniverseContinentRank[]).includes(assetRank) ? 50 : 0;
+
+  return (
+    <View style={[styles.categoryCloseupViewport, { height: viewportHeight }]}>
+      <View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          left: viewportWidth / 2 - focusX,
+          top: viewportHeight / 2 - focusY + focusTopOffset,
+          width: renderWidth,
+          height: stageHeight
+        }}
+      >
+        <PlanetIllustration
+          size={renderWidth}
+          data={data}
+          continents={continents}
+          rotationIndex={0}
+          onRotate={() => undefined}
+          onOpenContinent={() => undefined}
+          showChrome={false}
+          showZoomControls={false}
+        />
       </View>
     </View>
   );
@@ -1940,16 +1837,6 @@ const landSlots = [
   { width: "41%", height: "35%", right: "7%", top: "41%", rotate: "-17deg", label: "eastLabel", keeper: { left: "69%", top: "57%" }, shape: "landOrganicEast" },
   { width: "36%", height: "27%", left: "32%", bottom: "8%", rotate: "8deg", label: "southLabel", keeper: { left: "50%", top: "73%" }, shape: "landOrganicSouth" }
 ] as const;
-
-const continentHitZones = ["hitZoneUpLeft", "hitZoneUpRight", "hitZoneDownRight", "hitZoneDownLeft"] as const;
-const v3ContinentHitZones = ["hitZoneRankOne", "hitZoneRankTwo", "hitZoneRankThree", "hitZoneRankFour", "hitZoneRankFive", "hitZoneRankSix"] as const;
-
-const detailContinentFocusStyles: Record<(typeof continentLayerOrder)[number], "detailFocusUpLeft" | "detailFocusUpRight" | "detailFocusDownRight" | "detailFocusDownLeft"> = {
-  "up-left": "detailFocusUpLeft",
-  "up-right": "detailFocusUpRight",
-  "down-right": "detailFocusDownRight",
-  "down-left": "detailFocusDownLeft"
-};
 
 const biomeSlots = [
   { left: "30%", top: "32%" },
@@ -2061,17 +1948,23 @@ function PlanetIllustration({
   onOpenContinent,
   compact,
   enableContinentHits,
-  showChrome = true
+  showChrome = true,
+  showZoomControls = true,
+  showBackground = true,
+  zoomBottomInset = 0
 }: {
   size: number;
   data: ReturnType<typeof buildUniverse>;
   continents: ContinentSlice[];
   rotationIndex: number;
   onRotate: (direction: number) => void;
-  onOpenContinent: (category: UniverseCategory) => void;
+  onOpenContinent: (category: V4Category) => void;
   compact?: boolean;
   enableContinentHits?: boolean;
   showChrome?: boolean;
+  showZoomControls?: boolean;
+  showBackground?: boolean;
+  zoomBottomInset?: number;
 }) {
   const visible = visibleContinents(continents, rotationIndex);
   const visualWidth = size;
@@ -2189,7 +2082,7 @@ function PlanetIllustration({
         ]}
       />
         <BackgroundTwinkles />
-      <Image source={v4BackgroundAsset} style={styles.v4UniverseBackground} resizeMode="contain" />
+      {showBackground ? <Image source={v4BackgroundAsset} style={styles.v4UniverseBackground} resizeMode="cover" /> : null}
       <View style={[styles.planetAssetWrap, { width: visualWidth, height: visualHeight, transform: planetTransform }]}> 
         {v4Deco.filter((asset) => asset.layer === "background").map((asset) => (
           <Image key={asset.key} source={asset.source} style={[styles.v4DecoImage, v4DecoFrame(asset, visualWidth, visualHeight), asset.rotation ? { transform: [{ rotate: `${asset.rotation}deg` }] } : null]} resizeMode="contain" />
@@ -2243,6 +2136,15 @@ function PlanetIllustration({
               onPress={() => onOpenContinent(continent.key)}
             />
           )) : null}
+          {enableContinentHits && data.etcEntries.length ? v4EtcHitZones.map((bounds, index) => (
+            <Pressable
+              key={`continent-hit-etc-${index}`}
+              style={[styles.continentHitZone, v4BoundsFrame(bounds, visualWidth, visualHeight)]}
+              onPress={() => onOpenContinent("etc")}
+              accessibilityRole="button"
+              accessibilityLabel="기타 영역 상세 보기"
+            />
+          )) : null}
         </View>
         {emotionLayer === "light" || emotionLayer === "mixed" ? (
           <TwinkleLights />
@@ -2259,7 +2161,7 @@ function PlanetIllustration({
         <SteamPuffs style={styles.steamVentOuterUpperLeft} delay={360} outward />
         <SteamPuffs style={styles.steamVentOuterUpperRight} delay={1180} outwardRight />
       </View>
-      <View style={styles.zoomControls}>
+      {showZoomControls ? <View style={[styles.zoomControls, { bottom: 12 + zoomBottomInset }]}>
         <Pressable style={[styles.zoomButton, zoom <= 1 && styles.zoomButtonDisabled]} onPress={() => setPlanetZoom(zoomRef.current - 0.25)}>
           <Text style={styles.zoomButtonText}>−</Text>
         </Pressable>
@@ -2267,7 +2169,7 @@ function PlanetIllustration({
         <Pressable style={[styles.zoomButton, zoom >= 2 && styles.zoomButtonDisabled]} onPress={() => setPlanetZoom(zoomRef.current + 0.25)}>
           <Text style={styles.zoomButtonText}>＋</Text>
         </Pressable>
-      </View>
+      </View> : null}
       {showChrome ? (
         <View style={styles.rotationControls}>
           <Pressable style={styles.rotateButton} onPress={() => onRotate(-1)}>
@@ -2642,22 +2544,33 @@ const styles = StyleSheet.create({
     flex: 1
   },
   universeToolbar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 8
+    position: "absolute",
+    top: 12,
+    right: 0,
+    left: 0,
+    zIndex: 12,
+    height: 48,
+    alignItems: "center"
+  },
+  captureHiddenControl: {
+    opacity: 0
   },
   monthButton: {
     alignItems: "center",
     justifyContent: "center",
-    width: 42,
-    height: 42,
-    borderRadius: 14,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: "rgba(255,255,255,0.12)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.16)"
+  },
+  monthNavigationGroup: {
+    height: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7
   },
   monthButtonText: {
     color: "#eaf2ff",
@@ -2665,16 +2578,19 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     fontWeight: "900"
   },
+  monthButtonDisabled: {
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderColor: "rgba(255,255,255,0.08)"
+  },
+  monthButtonTextDisabled: {
+    color: "rgba(234,242,255,0.28)"
+  },
   monthTitleWrap: {
-    flex: 1,
+    width: 190,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 42,
-    paddingHorizontal: 8,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)"
+    minHeight: 44,
+    paddingHorizontal: 4
   },
   monthTitle: {
     color: "#fff",
@@ -2682,25 +2598,72 @@ const styles = StyleSheet.create({
     fontWeight: "900"
   },
   monthSubtitle: {
-    marginTop: 2,
     color: "rgba(238,242,255,0.68)",
     fontSize: 11,
     fontWeight: "800"
   },
-  savePlanetButton: {
+  monthSubtitleLine: {
+    width: 190,
+    marginTop: 2,
+    textAlign: "center"
+  },
+  monthTopCategory: {
+    color: "rgba(191, 224, 255, 0.84)",
+    fontSize: 10,
+    fontWeight: "800"
+  },
+  captureButton: {
+    position: "relative",
     alignItems: "center",
     justifyContent: "center",
-    minWidth: 72,
+    width: 42,
     height: 42,
-    paddingHorizontal: 10,
-    borderRadius: 14,
+    borderRadius: 21,
     backgroundColor: "rgba(191, 224, 255, 0.18)",
     borderWidth: 1,
     borderColor: "rgba(191, 224, 255, 0.34)"
   },
-  savePlanetText: {
+  captureButtonFloating: {
+    position: "absolute",
+    top: 0,
+    right: 10
+  },
+  bgmButtonFloating: {
+    position: "absolute",
+    top: 0,
+    left: 10
+  },
+  bgmButtonOff: {
+    backgroundColor: "rgba(7, 13, 42, 0.5)",
+    borderColor: "rgba(191, 224, 255, 0.2)"
+  },
+  bgmNote: {
     color: "#d8ebff",
-    fontSize: 12,
+    fontSize: 22,
+    lineHeight: 25,
+    fontWeight: "900"
+  },
+  bgmNoteOff: {
+    color: "rgba(216, 235, 255, 0.46)"
+  },
+  bgmMutedSlash: {
+    position: "absolute",
+    width: 25,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "rgba(216, 235, 255, 0.86)",
+    transform: [{ rotate: "-45deg" }]
+  },
+  captureCorners: {
+    position: "absolute",
+    color: "#d8ebff",
+    fontSize: 27,
+    lineHeight: 29,
+    fontWeight: "500"
+  },
+  captureCamera: {
+    marginTop: 1,
+    fontSize: 15,
     fontWeight: "900"
   },
   disabledButton: {
@@ -2708,36 +2671,35 @@ const styles = StyleSheet.create({
   },
   planetOnlyWrap: {
     flex: 1,
+    position: "relative",
     alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 12
+    justifyContent: "center"
   },
   planetCaptureCard: {
+    width: "100%",
+    position: "relative",
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 8,
-    borderRadius: 28
+    overflow: "hidden",
+    backgroundColor: "#030817"
   },
-  captureMonthLabel: {
-    zIndex: 2,
-    marginBottom: -8,
-    color: "rgba(238,242,255,0.84)",
-    fontSize: 13,
-    fontWeight: "900",
-    textShadowColor: "rgba(3,8,28,0.88)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3
+  planetLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 14,
+    backgroundColor: "#030817"
   },
-  captureScenarioLabel: {
-    zIndex: 2,
-    marginTop: 10,
-    marginBottom: -18,
-    color: "rgba(238,242,255,0.68)",
-    fontSize: 11,
-    fontWeight: "800",
-    textShadowColor: "rgba(3,8,28,0.88)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3
+  planetLoadingText: {
+    color: "#d8ebff",
+    fontSize: 16,
+    fontWeight: "800"
+  },
+  captureBackgroundImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%"
   },
   scenarioNavigator: {
     width: "100%",
@@ -2802,6 +2764,91 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800"
   },
+  categoryButtonStrip: {
+    minHeight: 42,
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 4,
+    paddingTop: 4,
+    paddingBottom: 6
+  },
+  categoryButtonScroller: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 16,
+    minHeight: 46,
+    backgroundColor: "rgba(7, 13, 42, 0.24)"
+  },
+  categoryButton: {
+    minWidth: 62,
+    height: 34,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingHorizontal: 11,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: "rgba(191, 224, 255, 0.26)",
+    backgroundColor: "rgba(255,255,255,0.1)"
+  },
+  categoryButtonLabel: {
+    color: "rgba(238,242,255,0.78)",
+    fontSize: 11,
+    fontWeight: "900"
+  },
+  categoryButtonCount: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  guestLoginPrompt: {
+    position: "absolute",
+    right: 12,
+    left: 12,
+    zIndex: 18,
+    minHeight: 68,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderWidth: 1,
+    borderColor: "rgba(191, 224, 255, 0.34)",
+    borderRadius: 8,
+    backgroundColor: "rgba(7, 20, 58, 0.94)"
+  },
+  guestLoginCopy: {
+    flex: 1,
+    gap: 3
+  },
+  guestLoginTitle: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  guestLoginDescription: {
+    color: "rgba(216, 235, 255, 0.72)",
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "700"
+  },
+  guestLoginButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 66,
+    minHeight: 38,
+    paddingHorizontal: 13,
+    borderRadius: 8,
+    backgroundColor: "#c9e6ff"
+  },
+  guestLoginButtonText: {
+    color: "#0b1b4d",
+    fontSize: 12,
+    fontWeight: "900"
+  },
   scenarioStrip: {
     alignItems: "center",
     gap: 8,
@@ -2832,7 +2879,7 @@ const styles = StyleSheet.create({
   continentOverlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 40,
-    justifyContent: "flex-end"
+    backgroundColor: "#07102e"
   },
   continentDim: {
     ...StyleSheet.absoluteFillObject,
@@ -2847,6 +2894,36 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.2)",
     backgroundColor: "rgba(13, 20, 56, 0.94)",
     overflow: "hidden"
+  },
+  categoryCloseupHeader: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    left: 0,
+    zIndex: 3,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: 12
+  },
+  categoryCloseupViewport: {
+    width: "100%",
+    overflow: "hidden",
+    backgroundColor: "#030817"
+  },
+  categoryDetailPanel: {
+    flex: 1,
+    marginTop: -1,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(191, 224, 255, 0.22)",
+    backgroundColor: "rgba(13, 20, 56, 0.98)"
+  },
+  categoryDetailScroll: {
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 28
   },
   continentSheetHeader: {
     flexDirection: "row",
@@ -2918,9 +2995,29 @@ const styles = StyleSheet.create({
     fontWeight: "900"
   },
   detailCategoryText: {
-    marginTop: 4,
     color: "#fff",
     fontSize: 22,
+    fontWeight: "900"
+  },
+  detailCategoryHeadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 4
+  },
+  detailLevelBadge: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 24,
+    paddingHorizontal: 9,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(159, 207, 255, 0.36)",
+    backgroundColor: "rgba(159, 207, 255, 0.14)"
+  },
+  detailLevelBadgeText: {
+    color: "#bfe0ff",
+    fontSize: 11,
     fontWeight: "900"
   },
   detailCountPill: {
@@ -3035,6 +3132,37 @@ const styles = StyleSheet.create({
     color: "rgba(238,242,255,0.82)",
     fontSize: 14,
     lineHeight: 21,
+    fontWeight: "700"
+  },
+  recentRecordsTitle: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  detailRecordCard: {
+    padding: 13,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    backgroundColor: "rgba(255,255,255,0.08)"
+  },
+  detailRecordDate: {
+    color: "#9fcfff",
+    fontSize: 11,
+    fontWeight: "900"
+  },
+  detailRecordText: {
+    marginTop: 6,
+    color: "rgba(238,242,255,0.9)",
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "700"
+  },
+  detailEmptyText: {
+    paddingVertical: 20,
+    textAlign: "center",
+    color: "rgba(238,242,255,0.58)",
+    fontSize: 13,
     fontWeight: "700"
   },
   topBar: {
@@ -3189,7 +3317,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: -6,
     gap: 8,
-    backgroundColor: "#030817"
+    backgroundColor: "transparent"
   },
   planetGlow: {
     position: "absolute",

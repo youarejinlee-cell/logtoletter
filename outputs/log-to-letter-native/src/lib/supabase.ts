@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient, Session } from "@supabase/supabase-js";
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
+import { appScheme } from "./appVariant";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./supabaseConfig";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -32,13 +33,13 @@ export function getNativeRedirectUri() {
 
 export function getStandaloneRedirectUri() {
   return AuthSession.makeRedirectUri({
-    scheme: "logtoletter",
+    scheme: appScheme,
     path: "auth/callback"
   });
 }
 
 export function getGoogleRedirectUri() {
-  return "logtoletter://auth/callback";
+  return `${appScheme}://auth/callback`;
 }
 
 function getAuthParams(url: string) {

@@ -12,7 +12,6 @@ const INTERVAL_STEP_MINUTES = 5;
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldPlaySound: false,
     shouldSetBadge: false,
     shouldShowBanner: true,

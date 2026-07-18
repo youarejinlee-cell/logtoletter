@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { PanResponder, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Keyboard, PanResponder, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { CloverBadge } from "../components/CloverBadge";
 import { Screen } from "../components/Screen";
 import { entryCategoryOptions, suggestEntryCategory } from "../lib/entryCategories";
@@ -74,10 +74,8 @@ const negativeMoods: Array<{ key: Mood; label: string }> = [
 ];
 
 const textPlaceholders = [
-  "지금 막 무슨 일이 있었어?",
-  "무슨 생각 중이야?",
-  "좋은 일은 기억하고, 나쁜 일은 털어버리기 위해 적어봐.",
-  "지금 나의 생각과 감정이 별로여도 괜찮아."
+  "무슨 생각 하고 있었어?",
+  "어떤 감정을 느끼고 있었어?"
 ];
 
 const MAX_ENTRY_TEXT_LENGTH = 100;
@@ -124,7 +122,7 @@ function decomposeHangul(input: string) {
   }).join("");
 }
 
-function composeHangul(input: string) {
+export function composeHangul(input: string) {
   const chars = [...decomposeHangul(input)];
   let result = "";
 
@@ -177,12 +175,17 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
   const [energy, setEnergy] = useState(50);
   const [sliderWidth, setSliderWidth] = useState(1);
   const [placeholder, setPlaceholder] = useState(randomPlaceholder);
-  const [positiveExpanded, setPositiveExpanded] = useState(false);
-  const [neutralExpanded, setNeutralExpanded] = useState(false);
-  const [negativeExpanded, setNegativeExpanded] = useState(false);
+  const [positiveExpanded, setPositiveExpanded] = useState(true);
+  const [neutralExpanded, setNeutralExpanded] = useState(true);
+  const [negativeExpanded, setNegativeExpanded] = useState(true);
   const energyValue = energy;
   const canSubmit = Boolean(hasText && mood);
   const energyLevel = energyLevels.find((level) => level.value === energyValue) || energyLevels[0];
+
+  const dismissEntryKeyboard = () => {
+    inputRef.current?.blur();
+    Keyboard.dismiss();
+  };
 
   const updateEnergyFromPageX = (pageX: number) => {
     const ratio = Math.max(0, Math.min(1, (pageX - sliderLeft.current) / sliderWidth));
@@ -200,7 +203,10 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
   const energyPanResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: (event) => measureSlider(event.nativeEvent.pageX),
+    onPanResponderGrant: (event) => {
+      dismissEntryKeyboard();
+      measureSlider(event.nativeEvent.pageX);
+    },
     onPanResponderMove: (event) => updateEnergyFromPageX(event.nativeEvent.pageX)
   });
 
@@ -228,6 +234,7 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
       eyebrow="LOG"
       title="기록"
       lead={"지금 이 순간의 생각과 감정을 솔직하게 남겨봐.\n그 기록이 미래의 너에게 의미로 돌아올 거야."}
+      dismissKeyboardOnTouchOutside
     >
       <TextInput
         ref={inputRef}
@@ -275,6 +282,7 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
                 category === option.key && { borderColor: theme.tint, backgroundColor: theme.soft }
               ]}
               onPress={() => {
+                dismissEntryKeyboard();
                 setCategory(option.key);
                 setCategoryTouched(true);
               }}
@@ -357,7 +365,10 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
         expanded={positiveExpanded}
         onToggle={() => setPositiveExpanded((current) => !current)}
         selected={mood}
-        onSelect={setMood}
+        onSelect={(selectedMood) => {
+          dismissEntryKeyboard();
+          setMood(selectedMood);
+        }}
         themeTint={theme.tint}
         themeSoft={theme.soft}
         themeText={theme.text}
@@ -372,7 +383,10 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
         expanded={neutralExpanded}
         onToggle={() => setNeutralExpanded((current) => !current)}
         selected={mood}
-        onSelect={setMood}
+        onSelect={(selectedMood) => {
+          dismissEntryKeyboard();
+          setMood(selectedMood);
+        }}
         themeTint={theme.tint}
         themeSoft={theme.soft}
         themeText={theme.text}
@@ -387,7 +401,10 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
         expanded={negativeExpanded}
         onToggle={() => setNegativeExpanded((current) => !current)}
         selected={mood}
-        onSelect={setMood}
+        onSelect={(selectedMood) => {
+          dismissEntryKeyboard();
+          setMood(selectedMood);
+        }}
         themeTint={theme.tint}
         themeSoft={theme.soft}
         themeText={theme.text}
@@ -415,6 +432,7 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
             createdAt: getNow().toISOString(),
             category
           });
+          dismissEntryKeyboard();
           replaceInputText("");
           setMood(null);
           setCategory("other");

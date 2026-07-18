@@ -10,6 +10,7 @@ outputs/log-to-letter-native/node_modules/
 outputs/log-to-letter-native/.expo/
 outputs/log-to-letter-native/dist/
 outputs/log-to-letter-native/*.log
+outputs/log-to-letter-native/bgm/*.band/
 outputs/log-to-letter-native/supabase/.temp/
 outputs/log-to-letter-native/.env
 outputs/log-to-letter-native/.env.local

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { CloverBadge } from "../components/CloverBadge";
 import { Screen } from "../components/Screen";
 import { categoryForEntry, entryCategoryLabels, entryCategoryOptions } from "../lib/entryCategories";
 import { getEnergyLevel, normalizeEnergyPercent } from "../lib/energyColors";
 import { AppTheme, useAppTheme } from "../lib/theme";
+import { composeHangul } from "./CaptureScreen";
 import { MoodCollectionContent } from "./MoodCollectionScreen";
 import { CalendarEnergyMode, EnergyColorMode, Entry, EntryCategory, Mood } from "../types/domain";
 
@@ -13,18 +14,24 @@ type Props = {
   energyColorMode: EnergyColorMode;
   calendarMode: CalendarEnergyMode;
   targetMoods: Mood[];
+  monthlyNotes: Record<string, string>;
   focusDate?: string;
+  onUpdateEntry: (entry: Entry) => void;
   onDeleteEntries: (entryIds: string[]) => void;
+  onSaveMonthlyNote: (monthKey: string, note: string) => void;
   analysisOnly?: boolean;
 };
 
 type ViewMode = "calendar" | "collection";
 type SortDirection = "desc" | "asc";
-type AnalysisMode = "summary" | "category" | "energy" | "suggestion";
+type AnalysisMode = "summary" | "category" | "energy" | "memo";
 type SummaryFilter =
+  | { type: "all" }
   | { type: "category"; label: string }
+  | { type: "categoryMood"; label: string; moodCategory: MoodCategory }
   | { type: "date"; role: "high" | "low"; date: string }
-  | { type: "mood"; mood: Mood };
+  | { type: "mood"; mood: Mood }
+  | { type: "moodCategory"; moodCategory: MoodCategory };
 
 const moodLabels: Record<Mood, string> = {
   calm: "😌 차분함",
@@ -342,31 +349,115 @@ function categoryRanking(entries: Entry[]) {
     .map((item) => item.label);
 }
 
+type CategoryHighlight = {
+  categoryLabel: string | null;
+  value: string;
+};
+
+type CategoryHighlights = {
+  mostPositive: CategoryHighlight;
+  mostNegative: CategoryHighlight;
+  highestEnergy: CategoryHighlight;
+  lowestEnergy: CategoryHighlight;
+};
+
+function categoryHighlights(entries: Entry[]): CategoryHighlights {
+  const stats = entries.reduce<Record<EntryCategory, {
+    count: number;
+    positive: number;
+    negative: number;
+    energySum: number;
+    latest: number;
+  }>>((acc, entry) => {
+    const category = categoryForEntry(entry);
+    if (!category) return acc;
+    const current = acc[category] || { count: 0, positive: 0, negative: 0, energySum: 0, latest: 0 };
+    const moodType = moodCategory(entry.mood);
+    acc[category] = {
+      count: current.count + 1,
+      positive: current.positive + (moodType === "positive" ? 1 : 0),
+      negative: current.negative + (moodType === "negative" ? 1 : 0),
+      energySum: current.energySum + normalizeEnergyPercent(entry.energy),
+      latest: Math.max(current.latest, new Date(entry.createdAt).getTime())
+    };
+    return acc;
+  }, {} as Record<EntryCategory, { count: number; positive: number; negative: number; energySum: number; latest: number }>);
+
+  const items = entryCategoryOptions
+    .map((option) => ({
+      label: entryCategoryLabels[option.key],
+      count: stats[option.key]?.count || 0,
+      positive: stats[option.key]?.positive || 0,
+      negative: stats[option.key]?.negative || 0,
+      averageEnergy: stats[option.key]?.count ? stats[option.key].energySum / stats[option.key].count : 0,
+      latest: stats[option.key]?.latest || 0
+    }))
+    .filter((item) => item.count > 0);
+  const empty = { categoryLabel: null, value: "-" };
+  const mostPositive = [...items].sort((a, b) => b.positive - a.positive || b.latest - a.latest)[0];
+  const mostNegative = [...items].sort((a, b) => b.negative - a.negative || b.latest - a.latest)[0];
+  const highestEnergy = [...items].sort((a, b) => b.averageEnergy - a.averageEnergy || b.latest - a.latest)[0];
+  const lowestEnergy = [...items].sort((a, b) => a.averageEnergy - b.averageEnergy || b.latest - a.latest)[0];
+
+  return {
+    mostPositive: mostPositive?.positive
+      ? { categoryLabel: mostPositive.label, value: `${mostPositive.label} · ${mostPositive.positive}개` }
+      : empty,
+    mostNegative: mostNegative?.negative
+      ? { categoryLabel: mostNegative.label, value: `${mostNegative.label} · ${mostNegative.negative}개` }
+      : empty,
+    highestEnergy: highestEnergy
+      ? { categoryLabel: highestEnergy.label, value: `${highestEnergy.label} · 평균 ${highestEnergy.averageEnergy.toFixed(1)}%` }
+      : empty,
+    lowestEnergy: lowestEnergy
+      ? { categoryLabel: lowestEnergy.label, value: `${lowestEnergy.label} · 평균 ${lowestEnergy.averageEnergy.toFixed(1)}%` }
+      : empty
+  };
+}
+
 function sameSummaryFilter(left: SummaryFilter | null, right: SummaryFilter) {
   if (!left || left.type !== right.type) return false;
+  if (left.type === "all" && right.type === "all") return true;
   if (left.type === "category" && right.type === "category") return left.label === right.label;
+  if (left.type === "categoryMood" && right.type === "categoryMood") {
+    return left.label === right.label && left.moodCategory === right.moodCategory;
+  }
   if (left.type === "date" && right.type === "date") return left.role === right.role && left.date === right.date;
   if (left.type === "mood" && right.type === "mood") return left.mood === right.mood;
+  if (left.type === "moodCategory" && right.type === "moodCategory") return left.moodCategory === right.moodCategory;
   return false;
 }
 
 function summaryFilterTitle(filter: SummaryFilter | null) {
   if (!filter) return "";
+  if (filter.type === "all") return "이달의 전체 기록";
   if (filter.type === "category") return `${filter.label} 기록`;
+  if (filter.type === "categoryMood") {
+    const moodLabel = filter.moodCategory === "positive" ? "긍정" : filter.moodCategory === "negative" ? "부정" : "중립";
+    return `${filter.label}의 ${moodLabel} 기록`;
+  }
   if (filter.type === "date") return filter.role === "high" ? "에너지를 많이 소진한 날의 기록" : "에너지를 아낀 날의 기록";
-  return `${moodLabels[filter.mood]} 기록`;
+  if (filter.type === "mood") return `${moodLabels[filter.mood]} 기록`;
+  const moodLabel = filter.moodCategory === "positive" ? "긍정" : filter.moodCategory === "negative" ? "부정" : "중립";
+  return `${moodLabel} 감정 기록`;
 }
 
 function entriesForSummaryFilter(entries: Entry[], filter: SummaryFilter | null) {
   if (!filter) return [];
   return entries
     .filter((entry) => {
+      if (filter.type === "all") return true;
       if (filter.type === "category") {
         const category = categoryForEntry(entry);
         return category ? entryCategoryLabels[category] === filter.label : false;
       }
+      if (filter.type === "categoryMood") {
+        const category = categoryForEntry(entry);
+        return Boolean(category && entryCategoryLabels[category] === filter.label && moodCategory(entry.mood) === filter.moodCategory);
+      }
       if (filter.type === "date") return dateKey(entry.createdAt) === filter.date;
-      return entry.mood === filter.mood;
+      if (filter.type === "mood") return entry.mood === filter.mood;
+      return moodCategory(entry.mood) === filter.moodCategory;
     })
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
@@ -554,7 +645,12 @@ function EnergyMoodChart({ entries }: { entries: Entry[] }) {
           {selectedEntries.length ? selectedEntries.map((entry) => (
             <View key={entry.id} style={styles.chartSelectedEntry}>
               <View style={styles.chartSelectedMeta}>
-                <Text style={styles.chartSelectedMood}>{moodLabels[entry.mood]}</Text>
+                <View style={styles.chartSelectedMetaLeft}>
+                  <Text style={styles.chartSelectedMood}>{moodLabels[entry.mood]}</Text>
+                  {categoryForEntry(entry) ? (
+                    <Text style={styles.chartSelectedCategory}>{entryCategoryLabels[categoryForEntry(entry)!]}</Text>
+                  ) : null}
+                </View>
                 <Text style={styles.chartSelectedTime}>{formatMonthDayLabel(dateKey(entry.createdAt))} · {formatTimeLabel(entry.createdAt)}</Text>
               </View>
               <Text style={[styles.chartSelectedEnergy, { color: moodCategoryColors[moodCategory(entry.mood)] }]}>쓴 에너지 {normalizeEnergyPercent(entry.energy)}%</Text>
@@ -578,6 +674,7 @@ function CategoryDistributionCard({ entries }: { entries: Entry[] }) {
   const theme = useAppTheme();
   const moodCategoryColors = getMoodCategoryColors(theme);
   const { width } = useWindowDimensions();
+  const [activeSlide, setActiveSlide] = useState(0);
   const distribution = categoryDistribution(entries);
   const slideWidth = Math.max(width - 92, 260);
   const energyItems = [...distribution.items].sort((a, b) => b.averageEnergy - a.averageEnergy || b.count - a.count);
@@ -602,6 +699,7 @@ function CategoryDistributionCard({ entries }: { entries: Entry[] }) {
   return (
     <View style={styles.categoryChartBox}>
       {distribution.items.length ? (
+        <>
         <ScrollView
           horizontal
           pagingEnabled
@@ -609,15 +707,19 @@ function CategoryDistributionCard({ entries }: { entries: Entry[] }) {
           decelerationRate="fast"
           snapToInterval={slideWidth + 10}
           contentContainerStyle={styles.categorySlides}
+          onMomentumScrollEnd={(event) => {
+            const nextIndex = Math.round(event.nativeEvent.contentOffset.x / (slideWidth + 10));
+            setActiveSlide(Math.max(0, Math.min(2, nextIndex)));
+          }}
         >
           <View style={[styles.categorySlide, { width: slideWidth }]}>
-            <Text style={styles.categorySlideTitle}>개수/비율 분석</Text>
+            <Text style={styles.categorySlideTitle}>카테고리별 개수 · 비율</Text>
             <View style={styles.categoryLegendHeader}>
               <View style={styles.categoryRankSpacer} />
-              <Text style={[styles.categoryLegendHeadText, styles.categoryLegendLabel]}>카테고리</Text>
+              <Text style={[styles.categoryLegendHeadText, styles.categoryLegendLabel, styles.categoryLegendHeaderTextCentered]}>카테고리</Text>
               <View style={styles.categoryLegendMetricWide}>
-                <Text style={[styles.categoryLegendHeadText, styles.categoryLegendMetricHalf]}>개수</Text>
-                <Text style={[styles.categoryLegendHeadText, styles.categoryLegendMetricHalf]}>비율</Text>
+                <Text style={[styles.categoryLegendHeadText, styles.categoryLegendMetricHalf, styles.categoryLegendHeaderTextCentered]}>개수</Text>
+                <Text style={[styles.categoryLegendHeadText, styles.categoryLegendMetricHalf, styles.categoryLegendHeaderTextCentered]}>비율</Text>
               </View>
             </View>
             {distribution.items.map((item, index) => (
@@ -646,10 +748,10 @@ function CategoryDistributionCard({ entries }: { entries: Entry[] }) {
             <Text style={styles.categorySlideTitle}>에너지 사용 분석</Text>
             <View style={styles.categoryLegendHeader}>
               <View style={styles.categoryRankSpacer} />
-              <Text style={[styles.categoryLegendHeadText, styles.categoryLegendLabel]}>카테고리</Text>
+              <Text style={[styles.categoryLegendHeadText, styles.categoryLegendLabel, styles.categoryLegendHeaderTextCentered]}>카테고리</Text>
               <View style={styles.categoryLegendMetricWide}>
-                <Text style={[styles.categoryLegendHeadText, styles.categoryLegendMetricHalf]}>평균 에너지</Text>
-                <Text style={[styles.categoryLegendHeadText, styles.categoryLegendMetricHalf]}>차지 비중</Text>
+                <Text style={[styles.categoryLegendHeadText, styles.categoryLegendMetricHalf, styles.categoryLegendHeaderTextCentered]}>평균 에너지</Text>
+                <Text style={[styles.categoryLegendHeadText, styles.categoryLegendMetricHalf, styles.categoryLegendHeaderTextCentered]}>차지 비중</Text>
               </View>
             </View>
             {energyItems.map((item, index) => (
@@ -680,9 +782,9 @@ function CategoryDistributionCard({ entries }: { entries: Entry[] }) {
             <Text style={styles.categorySlideTitle}>감정 비율 분석</Text>
             <View style={styles.categoryLegendHeader}>
               <View style={styles.categoryRankSpacer} />
-              <Text style={[styles.categoryLegendHeadText, styles.categoryLegendLabel]}>카테고리</Text>
+              <Text style={[styles.categoryLegendHeadText, styles.categoryLegendLabel, styles.categoryLegendHeaderTextCentered]}>카테고리</Text>
               <View style={styles.categoryLegendMetricWide}>
-                <Text style={[styles.categoryLegendHeadText, styles.categoryLegendMetricFull]}>감정 비율</Text>
+                <Text style={[styles.categoryLegendHeadText, styles.categoryLegendMetricFull, styles.categoryLegendHeaderTextCentered]}>감정 비율</Text>
               </View>
             </View>
             {moodRatioItems.map((item, index) => {
@@ -750,6 +852,15 @@ function CategoryDistributionCard({ entries }: { entries: Entry[] }) {
             </View>
           </View>
         </ScrollView>
+        <View style={styles.categorySlideDots}>
+          {[0, 1, 2].map((index) => (
+            <View
+              key={index}
+              style={[styles.categorySlideDot, activeSlide === index && styles.categorySlideDotActive]}
+            />
+          ))}
+        </View>
+        </>
       ) : (
         <Text style={styles.categoryLegendEmpty}>기록이 쌓이면 카테고리 비중이 보여.</Text>
       )}
@@ -766,7 +877,7 @@ function LegendDot({ color, label }: { color: string; label: string }) {
   );
 }
 
-export function CalendarScreen({ entries, energyColorMode, calendarMode, targetMoods, focusDate, onDeleteEntries, analysisOnly }: Props) {
+export function CalendarScreen({ entries, energyColorMode, calendarMode, targetMoods, monthlyNotes, focusDate, onUpdateEntry, onDeleteEntries, onSaveMonthlyNote, analysisOnly }: Props) {
   const theme = useAppTheme();
   const analysisNavy = "#0b1b4d";
   const analysisSky = "rgba(198, 229, 255, 0.92)";
@@ -778,6 +889,10 @@ export function CalendarScreen({ entries, energyColorMode, calendarMode, targetM
   const [viewMode, setViewMode] = useState<ViewMode>("calendar");
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("summary");
   const [summaryFilter, setSummaryFilter] = useState<SummaryFilter | null>(null);
+  const memoInputRef = useRef<TextInput | null>(null);
+  const memoDraftRef = useRef("");
+  const [memoHasText, setMemoHasText] = useState(false);
+  const [memoEditing, setMemoEditing] = useState(true);
   const [selectedDate, setSelectedDate] = useState(dateKey(initialDate));
   const [visibleMonth, setVisibleMonth] = useState(new Date(initialDate.getFullYear(), initialDate.getMonth(), 1));
 
@@ -798,7 +913,8 @@ export function CalendarScreen({ entries, energyColorMode, calendarMode, targetM
   );
   const activeSummary = summarize(visibleMonthEntries);
   const activeCategories = categoryRanking(visibleMonthEntries);
-  const activeSuggestions = analysisSuggestions(visibleMonthEntries);
+  const activeCategoryHighlights = categoryHighlights(visibleMonthEntries);
+  const savedMonthlyNote = monthlyNotes[visibleMonthKey] || "";
   const summaryFilterEntries = useMemo(
     () => entriesForSummaryFilter(visibleMonthEntries, summaryFilter),
     [visibleMonthEntries, summaryFilter]
@@ -807,6 +923,13 @@ export function CalendarScreen({ entries, energyColorMode, calendarMode, targetM
   useEffect(() => {
     setSummaryFilter(null);
   }, [visibleMonthKey]);
+
+  useEffect(() => {
+    memoDraftRef.current = savedMonthlyNote;
+    setMemoHasText(Boolean(savedMonthlyNote.trim()));
+    setMemoEditing(!savedMonthlyNote);
+    requestAnimationFrame(() => memoInputRef.current?.setNativeProps({ text: savedMonthlyNote }));
+  }, [savedMonthlyNote, visibleMonthKey]);
 
   const moveMonth = (delta: number) => {
     setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1));
@@ -821,12 +944,44 @@ export function CalendarScreen({ entries, energyColorMode, calendarMode, targetM
   const toggleSummaryFilter = (filter: SummaryFilter) => {
     setSummaryFilter((current) => (sameSummaryFilter(current, filter) ? null : filter));
   };
+  const updateMemoDraft = (next: string) => {
+    const composed = [...composeHangul(next)].slice(0, 2000).join("");
+    memoDraftRef.current = composed;
+    setMemoHasText(Boolean(composed.trim()));
+    if (composed !== next) {
+      requestAnimationFrame(() => memoInputRef.current?.setNativeProps({ text: composed }));
+    }
+  };
+  const startMemoEditing = () => {
+    memoDraftRef.current = savedMonthlyNote;
+    setMemoHasText(Boolean(savedMonthlyNote.trim()));
+    setMemoEditing(true);
+    requestAnimationFrame(() => {
+      memoInputRef.current?.setNativeProps({ text: savedMonthlyNote });
+      memoInputRef.current?.focus();
+    });
+  };
+  const cancelMemoEditing = () => {
+    memoDraftRef.current = savedMonthlyNote;
+    setMemoHasText(Boolean(savedMonthlyNote.trim()));
+    setMemoEditing(false);
+    Keyboard.dismiss();
+  };
+  const saveMemo = () => {
+    const note = memoDraftRef.current.trim();
+    if (!note) return;
+    memoDraftRef.current = note;
+    onSaveMonthlyNote(visibleMonthKey, note);
+    setMemoEditing(false);
+    Keyboard.dismiss();
+  };
 
   return (
     <Screen
       eyebrow={analysisOnly ? "ANALYSIS" : "CALENDAR"}
-      title={analysisOnly ? "분석 보기" : "캘린더"}
+      title={analysisOnly ? "분석 보기" : "모아보기"}
       lead={analysisOnly ? "남긴 기록을 여러 각도에서 다시 볼 수 있어." : "그날의 나는 무슨 생각을 했을까?"}
+      dismissKeyboardOnTouchOutside
     >
       {!analysisOnly ? (
         <View style={[styles.switcher, { backgroundColor: theme.soft }]}>
@@ -834,19 +989,19 @@ export function CalendarScreen({ entries, energyColorMode, calendarMode, targetM
             <Text style={[styles.switchText, { color: theme.muted }, viewMode === "calendar" && { color: theme.tint }]}>캘린더 보기</Text>
           </Pressable>
           <Pressable style={[styles.switchItem, viewMode === "collection" && { backgroundColor: theme.card }]} onPress={() => setViewMode("collection")}>
-            <Text style={[styles.switchText, { color: theme.muted }, viewMode === "collection" && { color: theme.tint }]}>모아보기</Text>
+            <Text style={[styles.switchText, { color: theme.muted }, viewMode === "collection" && { color: theme.tint }]}>필터 보기</Text>
           </Pressable>
         </View>
       ) : null}
 
       {analysisOnly || viewMode === "calendar" ? (
-        <View style={styles.monthPanel}>
-          <Pressable style={[styles.arrow, { backgroundColor: theme.soft }]} onPress={() => moveMonth(-1)}>
-            <Text style={[styles.arrowText, { color: theme.tint }]}>‹</Text>
+        <View style={[styles.monthPanel, analysisOnly && { borderColor: "#fff", backgroundColor: "#fff" }]}>
+          <Pressable style={[styles.arrow, { backgroundColor: analysisOnly ? "transparent" : theme.soft }]} onPress={() => moveMonth(-1)}>
+            <Text style={[styles.arrowText, { color: analysisOnly ? analysisNavy : theme.tint }]}>‹</Text>
           </Pressable>
-          <Text style={styles.month}>{monthKey(visibleMonth)}</Text>
-          <Pressable style={[styles.arrow, { backgroundColor: theme.soft }]} onPress={() => moveMonth(1)}>
-            <Text style={[styles.arrowText, { color: theme.tint }]}>›</Text>
+          <Text style={[styles.month, analysisOnly && { color: analysisNavy }]}>{monthKey(visibleMonth)}</Text>
+          <Pressable style={[styles.arrow, { backgroundColor: analysisOnly ? "transparent" : theme.soft }]} onPress={() => moveMonth(1)}>
+            <Text style={[styles.arrowText, { color: analysisOnly ? analysisNavy : theme.tint }]}>›</Text>
           </Pressable>
         </View>
       ) : null}
@@ -858,18 +1013,18 @@ export function CalendarScreen({ entries, energyColorMode, calendarMode, targetM
               ["summary", "요약"],
               ["category", "기록 카테고리 분석"],
               ["energy", "감정-에너지 분포"],
-              ["suggestion", "제안"]
+              ["memo", "메모"]
             ] as Array<[AnalysisMode, string]>).map(([key, label]) => (
               <Pressable
                 key={key}
                 style={[
                   styles.analysisTabItem,
-                  { backgroundColor: analysisSky },
-                  analysisMode === key && { backgroundColor: analysisNavy }
+                  { backgroundColor: analysisNavy },
+                  analysisMode === key && { backgroundColor: "#fff" }
                 ]}
                 onPress={() => setAnalysisMode(key)}
               >
-                <Text style={[styles.analysisTabText, { color: analysisNavy }, analysisMode === key && { color: "#fff" }]}>{label}</Text>
+                <Text style={[styles.analysisTabText, { color: analysisSky }, analysisMode === key && { color: analysisNavy }]}>{label}</Text>
               </Pressable>
             ))}
           </View>
@@ -881,6 +1036,7 @@ export function CalendarScreen({ entries, energyColorMode, calendarMode, targetM
                 embedded
                 padded
                 categories={activeCategories}
+                categoryHighlights={activeCategoryHighlights}
                 categoryTint={theme.tint}
                 categoryBorder={theme.border}
                 activeFilter={summaryFilter}
@@ -907,14 +1063,53 @@ export function CalendarScreen({ entries, energyColorMode, calendarMode, targetM
             </>
           ) : null}
 
-          {analysisMode === "suggestion" ? (
-            <View style={styles.suggestionBox}>
-              <Text style={styles.summaryLabel}>이번 달 제안</Text>
-              <View style={styles.recommendationList}>
-                {activeSuggestions.slice(0, 4).map((item) => (
-                  <Text key={item} style={styles.recommendationText}>{item}</Text>
-                ))}
-              </View>
+          {analysisMode === "memo" ? (
+            <View style={styles.memoBox}>
+              <Text style={styles.memoTitle}>이달의 메모</Text>
+              <Text style={styles.memoHint}>이달의 기록 중 마음에 드는 것을 다시 적어보거나 기억하고 싶은 것을 아카이브 해봐</Text>
+              {savedMonthlyNote && !memoEditing ? (
+                <>
+                  <View style={styles.memoSavedBox}>
+                    <Text style={styles.memoSavedText}>{savedMonthlyNote}</Text>
+                  </View>
+                  <View style={styles.memoActions}>
+                    <Pressable style={styles.memoEditButton} onPress={startMemoEditing}>
+                      <Text style={styles.memoEditButtonText}>수정</Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <TextInput
+                    ref={memoInputRef}
+                    defaultValue={memoDraftRef.current}
+                    onChangeText={updateMemoDraft}
+                    placeholder="기억하고 싶은 문장을 적어봐"
+                    placeholderTextColor="#8d99ad"
+                    multiline
+                    maxLength={2000}
+                    textAlignVertical="top"
+                    style={styles.memoInput}
+                  />
+                  <View style={styles.memoActions}>
+                    {savedMonthlyNote ? (
+                      <Pressable
+                        style={styles.memoCancelButton}
+                        onPress={cancelMemoEditing}
+                      >
+                        <Text style={styles.memoCancelButtonText}>취소</Text>
+                      </Pressable>
+                    ) : null}
+                    <Pressable
+                      style={[styles.memoSaveButton, !memoHasText && styles.memoSaveButtonDisabled]}
+                      disabled={!memoHasText}
+                      onPress={saveMemo}
+                    >
+                      <Text style={styles.memoSaveButtonText}>저장</Text>
+                    </Pressable>
+                  </View>
+                </>
+              )}
             </View>
           ) : null}
         </View>
@@ -968,6 +1163,7 @@ export function CalendarScreen({ entries, energyColorMode, calendarMode, targetM
             entries={selectedEntries}
             compactDate
             energyColorMode={energyColorMode}
+            onUpdateEntry={onUpdateEntry}
             onDeleteEntries={onDeleteEntries}
           />
         </>
@@ -984,6 +1180,7 @@ function SummaryCard({
   embedded,
   padded,
   categories = [],
+  categoryHighlights,
   categoryTint,
   categoryBorder,
   activeFilter,
@@ -994,12 +1191,14 @@ function SummaryCard({
   embedded?: boolean;
   padded?: boolean;
   categories?: string[];
+  categoryHighlights: CategoryHighlights;
   categoryTint?: string;
   categoryBorder?: string;
   activeFilter?: SummaryFilter | null;
   onToggleFilter?: (filter: SummaryFilter) => void;
 }) {
   const theme = useAppTheme();
+  const allFilter = { type: "all" } as SummaryFilter;
   const highFilter = summary.bestDate ? ({ type: "date", role: "high", date: summary.bestDate } as SummaryFilter) : null;
   const lowFilter = summary.lowestDate ? ({ type: "date", role: "low", date: summary.lowestDate } as SummaryFilter) : null;
   const summaryNavy = "#0b1b4d";
@@ -1008,17 +1207,28 @@ function SummaryCard({
   const tagBorder = theme.isDark ? "rgba(198, 229, 255, 0.56)" : categoryBorder;
   const selectedTagBackground = summaryNavy;
   const selectedTagText = "#ffffff";
+  const allSelected = sameSummaryFilter(activeFilter || null, allFilter);
   const highSelected = Boolean(highFilter && sameSummaryFilter(activeFilter || null, highFilter));
   const lowSelected = Boolean(lowFilter && sameSummaryFilter(activeFilter || null, lowFilter));
 
   return (
     <View style={[styles.summary, embedded && styles.summaryEmbedded, padded && styles.summaryPadded]}>
       {title ? <Text style={styles.summaryTitle}>{title}</Text> : null}
-      <View style={styles.summaryItem}>
-        <Text style={[styles.summaryLabel, styles.summaryMetricLabel]}>기록</Text>
-        <Text style={styles.summaryValue}>{summary.count}</Text>
-      </View>
-      <View style={styles.summaryItem}>
+      <Pressable
+        style={[styles.summaryItem, styles.summaryPressable, allSelected && styles.summaryPressableSelected]}
+        onPress={() => onToggleFilter?.(allFilter)}
+      >
+        <Text style={[styles.summaryLabel, styles.summaryMetricLabel, allSelected && styles.summaryTextSelected]}>기록</Text>
+        <Text style={[styles.summaryValue, styles.summaryMetricValue, allSelected && styles.summaryTextSelected]}>{summary.count}</Text>
+      </Pressable>
+      <Pressable
+        style={[styles.summaryItem, styles.summaryPressable, allSelected && styles.summaryPressableSelected]}
+        onPress={() => onToggleFilter?.(allFilter)}
+      >
+        <Text style={[styles.summaryLabel, styles.summaryMetricLabel, allSelected && styles.summaryTextSelected]}>평균 에너지 사용량</Text>
+        <Text style={[styles.summaryValue, styles.summaryMetricValue, allSelected && styles.summaryTextSelected]}>{summary.average}</Text>
+      </Pressable>
+      <View style={styles.summaryItemWide}>
         <Text style={[styles.summaryLabel, styles.summaryMetricLabel]}>자주 나타난 카테고리</Text>
         <View style={styles.keywordRow}>
           {categories.length ? categories.map((item) => {
@@ -1042,36 +1252,6 @@ function SummaryCard({
           )}
         </View>
       </View>
-      <View style={styles.summaryItemWide}>
-        <Text style={styles.summaryLabel}>평균 에너지 사용량</Text>
-        <Text style={styles.summaryValue}>{summary.average}</Text>
-      </View>
-      <Pressable
-        disabled={!highFilter}
-        style={[
-          styles.summaryItemWide,
-          styles.summaryFilterButton,
-          { borderColor: theme.border, backgroundColor: inactiveSky },
-          highSelected && { borderColor: selectedTagBackground, backgroundColor: selectedTagBackground }
-        ]}
-        onPress={() => highFilter && onToggleFilter?.(highFilter)}
-      >
-        <Text style={[styles.summaryLabel, { color: highSelected ? selectedTagText : summaryNavy }]}>에너지를 많이 소진한 날</Text>
-        <Text style={[styles.summaryValueSmall, { color: highSelected ? selectedTagText : summaryNavy }]}>{summary.best}</Text>
-      </Pressable>
-      <Pressable
-        disabled={!lowFilter}
-        style={[
-          styles.summaryItemWide,
-          styles.summaryFilterButton,
-          { borderColor: theme.border, backgroundColor: inactiveSky },
-          lowSelected && { borderColor: selectedTagBackground, backgroundColor: selectedTagBackground }
-        ]}
-        onPress={() => lowFilter && onToggleFilter?.(lowFilter)}
-      >
-        <Text style={[styles.summaryLabel, { color: lowSelected ? selectedTagText : summaryNavy }]}>에너지를 아낀 날</Text>
-        <Text style={[styles.summaryValueSmall, { color: lowSelected ? selectedTagText : summaryNavy }]}>{summary.lowest}</Text>
-      </Pressable>
       <View style={styles.summaryItemWide}>
         <Text style={styles.summaryLabel}>가장 많았던 감정</Text>
         {summary.moodRanking.length ? (
@@ -1099,8 +1279,64 @@ function SummaryCard({
       </View>
       <View style={styles.summaryItemWide}>
         <Text style={styles.summaryLabel}>감정 분포</Text>
-        <MoodRatioBar ratio={summary.moodRatio} />
+        <MoodRatioBar ratio={summary.moodRatio} activeFilter={activeFilter} onToggleFilter={onToggleFilter} />
       </View>
+      <View style={styles.summaryCategoryHighlights}>
+        {([
+          ["긍정 감정이 가장 많았던 카테고리", categoryHighlights.mostPositive, "positive"],
+          ["부정 감정이 가장 많았던 카테고리", categoryHighlights.mostNegative, "negative"],
+          ["에너지를 가장 많이 쓴 카테고리", categoryHighlights.highestEnergy, null],
+          ["에너지를 가장 적게 쓴 카테고리", categoryHighlights.lowestEnergy, null]
+        ] as Array<[string, CategoryHighlight, MoodCategory | null]>).map(([label, highlight, highlightMood]) => {
+          const filter = highlight.categoryLabel
+            ? (highlightMood
+              ? { type: "categoryMood", label: highlight.categoryLabel, moodCategory: highlightMood } as SummaryFilter
+              : { type: "category", label: highlight.categoryLabel } as SummaryFilter)
+            : null;
+          const selected = Boolean(filter && sameSummaryFilter(activeFilter || null, filter));
+          return (
+            <Pressable
+              key={label}
+              disabled={!filter}
+              style={[styles.summaryCategoryHighlight, selected && styles.summaryPressableSelected]}
+              onPress={() => filter && onToggleFilter?.(filter)}
+            >
+              <Text style={[styles.summaryCategoryHighlightLabel, selected && styles.summaryTextSelected]}>{label}</Text>
+              <Text style={[styles.summaryCategoryHighlightValue, selected && styles.summaryTextSelected]}>{highlight.value}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      <Pressable
+        disabled={!highFilter}
+        onPress={() => highFilter && onToggleFilter?.(highFilter)}
+        style={[
+          styles.summaryItemWide,
+          styles.summaryFilterButton,
+          { borderColor: theme.border, backgroundColor: inactiveSky },
+          highSelected && { borderColor: selectedTagBackground, backgroundColor: selectedTagBackground }
+        ]}
+      >
+        <View style={styles.summaryFilterContent}>
+          <Text style={[styles.summaryLabel, { color: highSelected ? selectedTagText : summaryNavy }]}>에너지를 많이 소진한 날</Text>
+          <Text style={[styles.summaryValueSmall, { color: highSelected ? selectedTagText : summaryNavy }]}>{summary.best}</Text>
+        </View>
+      </Pressable>
+      <Pressable
+        disabled={!lowFilter}
+        onPress={() => lowFilter && onToggleFilter?.(lowFilter)}
+        style={[
+          styles.summaryItemWide,
+          styles.summaryFilterButton,
+          { borderColor: theme.border, backgroundColor: inactiveSky },
+          lowSelected && { borderColor: selectedTagBackground, backgroundColor: selectedTagBackground }
+        ]}
+      >
+        <View style={styles.summaryFilterContent}>
+          <Text style={[styles.summaryLabel, { color: lowSelected ? selectedTagText : summaryNavy }]}>에너지를 아낀 날</Text>
+          <Text style={[styles.summaryValueSmall, { color: lowSelected ? selectedTagText : summaryNavy }]}>{summary.lowest}</Text>
+        </View>
+      </Pressable>
     </View>
   );
 }
@@ -1139,7 +1375,8 @@ function RecordCard({
   dateLabel,
   selecting,
   selected,
-  onPress
+  onPress,
+  onUpdateEntry
 }: {
   entry: Entry;
   energyColorMode: EnergyColorMode;
@@ -1147,11 +1384,29 @@ function RecordCard({
   selecting?: boolean;
   selected?: boolean;
   onPress?: () => void;
+  onUpdateEntry?: (entry: Entry) => void;
 }) {
   const theme = useAppTheme();
+  const [editing, setEditing] = useState(false);
+  const [draftText, setDraftText] = useState(entry.text);
+  const [draftCategory, setDraftCategory] = useState<EntryCategory>(categoryForEntry(entry) || "other");
   const entryEnergy = normalizeEnergyPercent(entry.energy);
   const entryEnergyLevel = getEnergyLevel(energyColorMode, entryEnergy, theme.tint);
   const entryCategory = categoryForEntry(entry);
+
+  const startEditing = () => {
+    setDraftText(entry.text);
+    setDraftCategory(entryCategory || "other");
+    setEditing(true);
+  };
+
+  const saveEdit = () => {
+    const text = draftText.trim();
+    if (!text || !onUpdateEntry) return;
+    onUpdateEntry({ ...entry, text, category: draftCategory });
+    setEditing(false);
+    Keyboard.dismiss();
+  };
 
   return (
     <Pressable
@@ -1184,14 +1439,78 @@ function RecordCard({
           />
           <Text style={[styles.mood, { color: theme.text }]}>{moodLabels[entry.mood]}</Text>
         </View>
-        <Text style={[styles.date, { color: theme.muted }]}>{dateLabel}</Text>
+        <View style={styles.entryMetaActions}>
+          <Text style={[styles.date, { color: theme.muted }]}>{dateLabel}</Text>
+          {!selecting && onUpdateEntry && !editing ? (
+            <Pressable hitSlop={8} onPress={startEditing}>
+              <Text style={[styles.editActionLabel, { color: theme.tint }]}>수정</Text>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
-      <Text style={[styles.text, { color: theme.text }]}>{entry.text}</Text>
+      {editing ? (
+        <View style={styles.entryEditBox}>
+          <TextInput
+            multiline
+            maxLength={100}
+            value={draftText}
+            onChangeText={setDraftText}
+            textAlignVertical="top"
+            style={[styles.entryEditInput, { borderColor: theme.border, backgroundColor: theme.cardAlt, color: theme.text }]}
+          />
+          <View style={styles.entryEditCategories}>
+            {entryCategoryOptions.map((option) => (
+              <Pressable
+                key={option.key}
+                style={[
+                  styles.entryEditCategory,
+                  { borderColor: theme.border, backgroundColor: theme.cardAlt },
+                  draftCategory === option.key && { borderColor: theme.tint, backgroundColor: theme.soft }
+                ]}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setDraftCategory(option.key);
+                }}
+              >
+                <Text style={[styles.entryEditCategoryText, { color: draftCategory === option.key ? theme.tint : theme.muted }]}>{option.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.entryEditActions}>
+            <Pressable
+              style={[styles.entryEditButton, { borderColor: theme.border }]}
+              onPress={() => {
+                Keyboard.dismiss();
+                setEditing(false);
+              }}
+            >
+              <Text style={[styles.entryEditButtonText, { color: theme.muted }]}>취소</Text>
+            </Pressable>
+            <Pressable
+              disabled={!draftText.trim()}
+              style={[styles.entryEditButton, { borderColor: theme.tint, backgroundColor: theme.tint }, !draftText.trim() && styles.disabledActionLabel]}
+              onPress={saveEdit}
+            >
+              <Text style={[styles.entryEditButtonText, { color: theme.inverseText }]}>저장</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <Text style={[styles.text, { color: theme.text }]}>{entry.text}</Text>
+      )}
     </Pressable>
   );
 }
 
-function MoodRatioBar({ ratio }: { ratio: ReturnType<typeof getMoodCategoryRatio> }) {
+function MoodRatioBar({
+  ratio,
+  activeFilter,
+  onToggleFilter
+}: {
+  ratio: ReturnType<typeof getMoodCategoryRatio>;
+  activeFilter?: SummaryFilter | null;
+  onToggleFilter?: (filter: SummaryFilter) => void;
+}) {
   const theme = useAppTheme();
   const moodCategoryColors = getMoodCategoryColors(theme);
 
@@ -1208,26 +1527,42 @@ function MoodRatioBar({ ratio }: { ratio: ReturnType<typeof getMoodCategoryRatio
   return (
     <View style={styles.moodRatioBox}>
       <View style={styles.moodRatioBar}>
-        {items.map((item) => (
-          <View
-            key={item.key}
-            style={[
-              styles.moodRatioSegment,
-              {
-                flex: item.value || 0.0001,
-                backgroundColor: item.color
-              }
-            ]}
-          />
-        ))}
+        {items.map((item) => {
+          const filter = { type: "moodCategory", moodCategory: item.key } as SummaryFilter;
+          return (
+            <Pressable
+              key={item.key}
+              disabled={!item.value}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.label} 감정 기록 보기`}
+              style={[
+                styles.moodRatioSegment,
+                {
+                  flex: item.value || 0.0001,
+                  backgroundColor: item.color
+                }
+              ]}
+              onPress={() => onToggleFilter?.(filter)}
+            />
+          );
+        })}
       </View>
       <View style={styles.moodRatioLegend}>
-        {items.map((item) => (
-          <View key={item.key} style={styles.moodRatioLegendItem}>
-            <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-            <Text style={styles.moodRatioLegendText}>{item.label} {Math.round((item.value / ratio.total) * 100)}%</Text>
-          </View>
-        ))}
+        {items.map((item) => {
+          const filter = { type: "moodCategory", moodCategory: item.key } as SummaryFilter;
+          const selected = sameSummaryFilter(activeFilter || null, filter);
+          return (
+            <Pressable
+              key={item.key}
+              disabled={!item.value}
+              style={[styles.moodRatioLegendItem, selected && styles.moodRatioLegendItemSelected]}
+              onPress={() => onToggleFilter?.(filter)}
+            >
+              <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+              <Text style={[styles.moodRatioLegendText, selected && styles.summaryTextSelected]}>{item.label} {Math.round((item.value / ratio.total) * 100)}%</Text>
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );
@@ -1238,12 +1573,14 @@ function EntryList({
   entries,
   compactDate,
   energyColorMode,
+  onUpdateEntry,
   onDeleteEntries
 }: {
   title?: string;
   entries: Entry[];
   compactDate?: boolean;
   energyColorMode: EnergyColorMode;
+  onUpdateEntry: (entry: Entry) => void;
   onDeleteEntries: (entryIds: string[]) => void;
 }) {
   const theme = useAppTheme();
@@ -1369,6 +1706,7 @@ function EntryList({
             selecting={selecting}
             selected={selectedIds.includes(entry.id)}
             onPress={() => toggleSelect(entry.id)}
+            onUpdateEntry={onUpdateEntry}
           />
         ))
       ) : (
@@ -1531,12 +1869,59 @@ const styles = StyleSheet.create({
     width: "100%",
     gap: 4
   },
+  summaryPressable: {
+    minHeight: 58,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: "transparent",
+    borderRadius: 8
+  },
+  summaryPressableSelected: {
+    borderColor: "#0b1b4d",
+    backgroundColor: "#0b1b4d"
+  },
+  summaryTextSelected: {
+    color: "#ffffff"
+  },
+  summaryCategoryHighlights: {
+    width: "100%",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 10
+  },
+  summaryCategoryHighlight: {
+    width: "48.5%",
+    minHeight: 74,
+    gap: 7,
+    padding: 9,
+    borderWidth: 1,
+    borderColor: "transparent",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(101, 112, 100, 0.18)"
+  },
+  summaryCategoryHighlightLabel: {
+    color: "#657064",
+    fontSize: 10,
+    lineHeight: 15,
+    fontWeight: "900"
+  },
+  summaryCategoryHighlightValue: {
+    color: "#18241b",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "900"
+  },
   summaryFilterButton: {
+    gap: 10,
     padding: 10,
     borderWidth: 1,
     borderColor: "#dfe8da",
     borderRadius: 8,
     backgroundColor: "#fbfdf8"
+  },
+  summaryFilterContent: {
+    gap: 4
   },
   summaryLabel: {
     color: "#657064",
@@ -1544,7 +1929,11 @@ const styles = StyleSheet.create({
     fontWeight: "900"
   },
   summaryMetricLabel: {
-    minHeight: 18
+    height: 18,
+    lineHeight: 18
+  },
+  summaryMetricValue: {
+    lineHeight: 25
   },
   summaryValue: {
     color: "#18241b",
@@ -1618,7 +2007,13 @@ const styles = StyleSheet.create({
   moodRatioLegendItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    borderRadius: 8
+  },
+  moodRatioLegendItemSelected: {
+    backgroundColor: "#0b1b4d"
   },
   moodRatioLegendText: {
     color: "#657064",
@@ -1709,6 +2104,98 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#fff"
   },
+  memoBox: {
+    gap: 12,
+    padding: 14,
+    borderRadius: 8,
+    backgroundColor: "#fff"
+  },
+  memoTitle: {
+    color: "#18241b",
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  memoHint: {
+    color: "#657064",
+    fontSize: 12,
+    lineHeight: 19,
+    fontWeight: "700"
+  },
+  memoSavedBox: {
+    minHeight: 132,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "rgba(11, 27, 77, 0.14)",
+    borderRadius: 8,
+    backgroundColor: "#f7f9fd"
+  },
+  memoSavedText: {
+    color: "#18241b",
+    fontSize: 14,
+    lineHeight: 22,
+    fontWeight: "700"
+  },
+  memoInput: {
+    minHeight: 150,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "rgba(11, 27, 77, 0.22)",
+    borderRadius: 8,
+    backgroundColor: "#f7f9fd",
+    color: "#18241b",
+    fontSize: 14,
+    lineHeight: 22,
+    fontWeight: "700"
+  },
+  memoActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8
+  },
+  memoEditButton: {
+    minWidth: 72,
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: "#0b1b4d"
+  },
+  memoEditButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  memoCancelButton: {
+    minWidth: 72,
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "rgba(11, 27, 77, 0.18)",
+    borderRadius: 8,
+    backgroundColor: "#fff"
+  },
+  memoCancelButtonText: {
+    color: "#0b1b4d",
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  memoSaveButton: {
+    minWidth: 72,
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: "#0b1b4d"
+  },
+  memoSaveButtonDisabled: {
+    opacity: 0.35
+  },
+  memoSaveButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "900"
+  },
   analysisTitle: {
     color: "#18241b",
     fontSize: 17,
@@ -1751,6 +2238,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fbfdf8"
   },
   categorySlideTitle: {
+    paddingBottom: 8,
     color: "#18241b",
     fontSize: 15,
     fontWeight: "900"
@@ -1772,11 +2260,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "900"
   },
+  categoryLegendHeaderTextCentered: {
+    textAlign: "center"
+  },
   categoryLegendItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    minHeight: 25
+    minHeight: 34
   },
   categoryTotalRow: {
     marginTop: 4,
@@ -1898,6 +2389,27 @@ const styles = StyleSheet.create({
   },
   categoryMoodRatioSegment: {
     height: "100%"
+  },
+  categorySlideDots: {
+    height: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    marginTop: -4,
+    marginBottom: 8
+  },
+  categorySlideDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#c6ccd8"
+  },
+  categorySlideDotActive: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#0b1b4d"
   },
   categoryLegendCount: {
     width: 38,
@@ -2080,10 +2592,27 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8
   },
+  chartSelectedMetaLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 1,
+    gap: 6
+  },
   chartSelectedMood: {
     flexShrink: 0,
     color: "#f7f9ff",
     fontSize: 12,
+    fontWeight: "900"
+  },
+  chartSelectedCategory: {
+    flexShrink: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+    overflow: "hidden",
+    color: "#0b1b4d",
+    backgroundColor: "rgba(198, 229, 255, 0.92)",
+    fontSize: 10,
     fontWeight: "900"
   },
   chartSelectedTime: {
@@ -2311,6 +2840,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8
   },
+  entryMetaActions: {
+    alignItems: "flex-end",
+    gap: 4
+  },
+  editActionLabel: {
+    fontSize: 12,
+    fontWeight: "900"
+  },
   moodEnergyGroup: {
     flex: 1,
     flexDirection: "row",
@@ -2355,6 +2892,49 @@ const styles = StyleSheet.create({
     color: "#18241b",
     fontSize: 15,
     lineHeight: 22
+  },
+  entryEditBox: {
+    gap: 10
+  },
+  entryEditInput: {
+    minHeight: 88,
+    padding: 12,
+    borderWidth: 1,
+    borderRadius: 8,
+    fontSize: 15,
+    lineHeight: 22
+  },
+  entryEditCategories: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6
+  },
+  entryEditCategory: {
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderRadius: 8
+  },
+  entryEditCategoryText: {
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  entryEditActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8
+  },
+  entryEditButton: {
+    minWidth: 64,
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderRadius: 8
+  },
+  entryEditButtonText: {
+    fontSize: 13,
+    fontWeight: "900"
   },
   empty: {
     color: "#657064",

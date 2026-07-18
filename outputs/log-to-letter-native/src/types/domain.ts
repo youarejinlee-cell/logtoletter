@@ -38,15 +38,9 @@ export type Mood =
 export type EntryCategory =
   | "work"
   | "relationship"
-  | "relationships"
-  | "love"
-  | "family"
-  | "dream"
   | "selfDiscipline"
   | "wealth"
   | "taste"
-  | "habit"
-  | "attitude"
   | "health"
   | "other";
 
@@ -92,6 +86,7 @@ export type LetterPaperStyle = "plain" | "themeBorder" | "clover" | "cloudTitle"
 export type AppState = {
   entries: Entry[];
   letters: Letter[];
+  monthlyNotes: Record<string, string>;
   settings: NotificationSettings;
   theme: ColorTheme;
   energyColorMode: EnergyColorMode;

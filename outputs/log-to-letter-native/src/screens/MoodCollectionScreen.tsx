@@ -58,14 +58,8 @@ const moodLabelMap = moodOptions.reduce<Record<Mood, string>>((acc, mood) => {
   return acc;
 }, {} as Record<Mood, string>);
 
-const defaultTargetMoods: Mood[] = ["calm", "joy", "moved"];
-
-function getInitialMoods(targetMoods: Mood[]) {
-  return targetMoods.length ? targetMoods.slice(0, 3) : defaultTargetMoods;
-}
-
 function dateKey(value: string | Date) {
-  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   const date = typeof value === "string" ? new Date(value) : value;
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -134,16 +128,16 @@ function FilterIcon({ color }: { color: string }) {
   );
 }
 
-export function MoodCollectionContent({ entries, energyColorMode, targetMoods }: Props) {
+export function MoodCollectionContent({ entries, energyColorMode }: Props) {
   const theme = useAppTheme();
   const defaultRange = rangeFromMode("quarter");
   const [rangeMode, setRangeMode] = useState<RangeMode>("quarter");
   const [appliedRange, setAppliedRange] = useState(defaultRange);
   const [draftStart, setDraftStart] = useState(defaultRange.start);
   const [draftEnd, setDraftEnd] = useState(defaultRange.end);
-  const [selectedMoods, setSelectedMoods] = useState<Mood[]>(() => getInitialMoods(targetMoods));
+  const [selectedMoods, setSelectedMoods] = useState<Mood[]>([]);
   const [draftRangeMode, setDraftRangeMode] = useState<RangeMode>("quarter");
-  const [draftMoods, setDraftMoods] = useState<Mood[]>(() => getInitialMoods(targetMoods));
+  const [draftMoods, setDraftMoods] = useState<Mood[]>([]);
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [dateError, setDateError] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
@@ -176,7 +170,7 @@ export function MoodCollectionContent({ entries, energyColorMode, targetMoods }:
   }, [entries, draftStart, draftEnd, moodCounts]);
 
   const filteredEntries = useMemo(() => rangeEntries
-    .filter((entry) => selectedMoods.includes(entry.mood))
+    .filter((entry) => selectedMoods.length === 0 || selectedMoods.includes(entry.mood))
     .sort((a, b) => {
       const left = new Date(a.createdAt).getTime();
       const right = new Date(b.createdAt).getTime();
@@ -233,7 +227,7 @@ export function MoodCollectionContent({ entries, energyColorMode, targetMoods }:
 
   const selectedLabel = selectedMoods.length
     ? selectedMoods.map((mood) => moodLabelMap[mood] || mood).join(", ")
-    : "선택한 감정";
+    : "전체 감정";
 
   return (
     <>
@@ -425,7 +419,7 @@ export function MoodCollectionContent({ entries, energyColorMode, targetMoods }:
 
 export function MoodCollectionScreen(props: Props) {
   return (
-    <Screen eyebrow="COLLECT" title="모아보기" lead="기간과 감정을 고르면 그때의 기록을 한곳에 모아볼 수 있어.">
+    <Screen eyebrow="FILTER" title="필터 보기" lead="기간과 감정을 고르면 그때의 기록을 한곳에 모아볼 수 있어.">
       <MoodCollectionContent {...props} />
     </Screen>
   );

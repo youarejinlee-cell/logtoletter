@@ -27,7 +27,6 @@ export function AuthCard({ user, loading, error, onGoogleLogin }: Props) {
             </View>
           )}
           <View style={styles.profileText}>
-            <Text style={[styles.label, { color: theme.muted }]}>계정</Text>
             <Text style={[styles.title, { color: theme.text }]}>{displayName}</Text>
           </View>
         </View>

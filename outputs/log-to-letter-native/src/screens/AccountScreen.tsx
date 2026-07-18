@@ -72,7 +72,7 @@ export function AccountScreen({
               onPress={() => {
                 Alert.alert(
                   "내 계정 삭제",
-                  "계정과 서버 데이터를 삭제할게. 계정 삭제용 서버 함수가 연결되어 있어야 완료돼.",
+                  "계정과 서버에 보관된 모든 기록을 삭제할게. 이 작업은 되돌릴 수 없어.",
                   [
                     { text: "아니오", style: "cancel" },
                     { text: "삭제", style: "destructive", onPress: () => void onDeleteAccount() }

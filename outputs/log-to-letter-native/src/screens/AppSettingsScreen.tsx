@@ -56,7 +56,7 @@ export function AppSettingsScreen({
     <Screen eyebrow="Settings" title="설정">
       <View style={[styles.panel, { borderColor: currentTheme.border, backgroundColor: currentTheme.card }]}>
         <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>추구 감정</Text>
-        <Text style={[styles.description, { color: currentTheme.muted }]}>네가 가장 느끼고 싶은 감정을 골라줘. 모아보기에서 가장 먼저 확인하게 해둘게</Text>
+        <Text style={[styles.description, { color: currentTheme.muted }]}>네가 가장 느끼고 싶은 감정을 골라줘. 필터 보기에서 가장 먼저 확인하게 해둘게</Text>
         <View style={styles.moodWrap}>
           {positiveMoodOptions.map((mood) => {
             const active = targetMoods.includes(mood.key);

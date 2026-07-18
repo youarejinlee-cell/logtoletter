@@ -1,8 +1,9 @@
 import { User } from "@supabase/supabase-js";
 import { AppState, Entry, Letter, Mood, NotificationSettings } from "../types/domain";
+import { categoryForEntry, normalizeEntryCategory } from "./entryCategories";
 import { normalizeEnergyPercent } from "./energyColors";
 import { createId, isUuid } from "./ids";
-import { normalizeColorTheme, normalizeLetterPaperStyle } from "./storage";
+import { normalizeColorTheme, normalizeLetterPaperStyle, normalizeMonthlyNotes } from "./storage";
 import { supabase } from "./supabase";
 
 type EntryRow = {
@@ -11,6 +12,7 @@ type EntryRow = {
   mood: string;
   energy: number;
   created_at: string;
+  category?: string | null;
 };
 
 type LetterRow = {
@@ -46,6 +48,7 @@ type AppSettingsRow = {
     calendarEnergyMode?: AppState["calendarEnergyMode"];
     letterPaperStyle?: AppState["letterPaperStyle"];
     targetMoods?: AppState["targetMoods"];
+    monthlyNotes?: AppState["monthlyNotes"];
   } | null;
 };
 
@@ -54,7 +57,7 @@ const MAX_INTERVAL_MINUTES = 120;
 const INTERVAL_STEP_MINUTES = 5;
 
 function dateKey(value: string | Date) {
-  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   const date = typeof value === "string" ? new Date(value) : value;
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -86,6 +89,7 @@ function entryToRow(userId: string, entry: Entry) {
     text: entry.text,
     mood: entry.mood,
     energy: normalizeEnergyPercent(entry.energy),
+    category: categoryForEntry(entry),
     source: "native",
     created_at: entry.createdAt,
     updated_at: new Date().toISOString()
@@ -93,12 +97,18 @@ function entryToRow(userId: string, entry: Entry) {
 }
 
 function rowToEntry(row: EntryRow): Entry {
-  return {
+  const entry: Entry = {
     id: row.id,
     text: row.text,
     mood: row.mood as Mood,
     energy: normalizeEnergyPercent(row.energy),
     createdAt: row.created_at
+  };
+  const savedCategory = normalizeEntryCategory(row.category);
+
+  return {
+    ...entry,
+    category: savedCategory || categoryForEntry(entry) || "other"
   };
 }
 
@@ -179,6 +189,7 @@ export function normalizeStateIds(state: AppState): AppState {
   return {
     ...state,
     entries: normalizeEntries(state.entries),
+    monthlyNotes: normalizeMonthlyNotes(state.monthlyNotes),
     letterPaperStyle: normalizeLetterPaperStyle(state.letterPaperStyle)
   };
 }
@@ -216,7 +227,8 @@ export async function pushAppState(userId: string, state: AppState) {
       energyColorMode: normalized.energyColorMode,
       calendarEnergyMode: normalized.calendarEnergyMode,
       letterPaperStyle: normalized.letterPaperStyle,
-      targetMoods: normalized.targetMoods || []
+      targetMoods: normalized.targetMoods || [],
+      monthlyNotes: normalized.monthlyNotes || {}
     },
     updated_at: new Date().toISOString()
   });
@@ -232,7 +244,7 @@ export async function pullAppState(userId: string, local: AppState): Promise<App
     notificationResult,
     settingsResult
   ] = await Promise.all([
-    supabase.from("entries").select("id,text,mood,energy,created_at").eq("user_id", userId).order("created_at", { ascending: false }),
+    supabase.from("entries").select("id,text,mood,energy,category,created_at").eq("user_id", userId).order("created_at", { ascending: false }),
     supabase.from("letters").select("id,title,body,period_start,period_end,delivered_at,summary_json,themes,recommendations,postscript,model,prompt_version").eq("user_id", userId).order("delivered_at", { ascending: false }),
     supabase.from("notification_settings").select("enabled,schedule_mode,start_time,interval_minutes,dnd_start,dnd_end,weekdays,fixed_times").eq("user_id", userId).maybeSingle(),
     supabase.from("app_settings").select("preferences").eq("user_id", userId).maybeSingle()
@@ -254,6 +266,7 @@ export async function pullAppState(userId: string, local: AppState): Promise<App
     energyColorMode: preferences.energyColorMode || local.energyColorMode,
     calendarEnergyMode: preferences.calendarEnergyMode || local.calendarEnergyMode,
     targetMoods: preferences.targetMoods || local.targetMoods || [],
+    monthlyNotes: normalizeMonthlyNotes(preferences.monthlyNotes || local.monthlyNotes),
     letterPaperStyle: normalizeLetterPaperStyle(preferences.letterPaperStyle || local.letterPaperStyle)
   };
 }

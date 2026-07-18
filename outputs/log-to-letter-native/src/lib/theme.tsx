@@ -25,7 +25,7 @@ export const themePalettes: Record<ColorTheme, AppTheme> = {
 };
 
 export const cosmicTheme: AppTheme = {
-  label: "우주",
+  label: "행성",
   tint: "#9fd7ff",
   soft: "rgba(157, 215, 255, 0.16)",
   page: "#070d2a",

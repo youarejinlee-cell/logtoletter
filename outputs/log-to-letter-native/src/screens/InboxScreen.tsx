@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Image, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
+import { Alert, Image, Linking, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { Screen } from "../components/Screen";
 import { normalizeEnergyPercent } from "../lib/energyColors";
 import { AppTheme, useAppTheme } from "../lib/theme";
@@ -117,7 +117,7 @@ function getMoodCategoryColors(theme: AppTheme) {
 }
 
 function dateKey(value: string) {
-  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   const date = new Date(value);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -503,9 +503,17 @@ export function InboxScreen({ entries, letters, letterPaperStyle, onSavePostscri
       setSaveMessage(null);
       try {
         const MediaLibrary = require<typeof import("expo-media-library")>("expo-media-library");
-        const permission = await MediaLibrary.requestPermissionsAsync();
+        const permission = await MediaLibrary.requestPermissionsAsync(true);
         if (!permission.granted) {
           setSaveMessage("사진 저장 권한이 필요해.");
+          Alert.alert(
+            "사진 저장 권한이 필요해",
+            "아이폰 설정에서 Log Planet의 사진 추가 권한을 허용해줘.",
+            [
+              { text: "나중에", style: "cancel" },
+              { text: "설정 열기", onPress: () => void Linking.openSettings() }
+            ]
+          );
           return;
         }
         const indexes = mode === "current" ? [pageIndex] : pages.map((_, index) => index);
