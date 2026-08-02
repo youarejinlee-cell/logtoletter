@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Log Planet 로그인</title>
+    <style>
+      body {
+        display: grid;
+        min-height: 100vh;
+        margin: 0;
+        place-items: center;
+        background: #070d2a;
+        color: #fff;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        text-align: center;
+      }
+      main { padding: 24px; }
+      a {
+        display: inline-block;
+        margin-top: 20px;
+        padding: 12px 20px;
+        border-radius: 8px;
+        background: #fff;
+        color: #070d2a;
+        font-weight: 700;
+        text-decoration: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>로그인 정보를 앱으로 연결하고 있어요.</h1>
+      <p>앱이 자동으로 열리지 않으면 아래 버튼을 눌러주세요.</p>
+      <a id="open-app" href="logplanet://auth/callback">Log Planet 열기</a>
+    </main>
+    <script>
+      const appUrl = `logplanet://auth/callback${window.location.search}${window.location.hash}`;
+      document.getElementById("open-app").href = appUrl;
+      window.location.replace(appUrl);
+    </script>
+  </body>
+</html>
