@@ -4,6 +4,7 @@ import { CloverBadge } from "../components/CloverBadge";
 import { Screen } from "../components/Screen";
 import { entryCategoryOptions, suggestEntryCategory } from "../lib/entryCategories";
 import { getEnergyPalette } from "../lib/energyColors";
+import { entryTextLength, MAX_ENTRY_TEXT_LENGTH } from "../lib/entryText";
 import { createId } from "../lib/ids";
 import { useAppTheme } from "../lib/theme";
 import { EnergyColorMode, Entry, EntryCategory, Mood } from "../types/domain";
@@ -78,87 +79,8 @@ const textPlaceholders = [
   "어떤 감정을 느끼고 있었어?"
 ];
 
-const MAX_ENTRY_TEXT_LENGTH = 100;
-
 function randomPlaceholder() {
   return textPlaceholders[Math.floor(Math.random() * textPlaceholders.length)];
-}
-
-const initialMap: Record<string, number> = {
-  ㄱ: 0, ㄲ: 1, ㄴ: 2, ㄷ: 3, ㄸ: 4, ㄹ: 5, ㅁ: 6, ㅂ: 7, ㅃ: 8, ㅅ: 9, ㅆ: 10, ㅇ: 11, ㅈ: 12, ㅉ: 13, ㅊ: 14, ㅋ: 15, ㅌ: 16, ㅍ: 17, ㅎ: 18
-};
-const medialMap: Record<string, number> = {
-  ㅏ: 0, ㅐ: 1, ㅑ: 2, ㅒ: 3, ㅓ: 4, ㅔ: 5, ㅕ: 6, ㅖ: 7, ㅗ: 8, ㅘ: 9, ㅙ: 10, ㅚ: 11, ㅛ: 12, ㅜ: 13, ㅝ: 14, ㅞ: 15, ㅟ: 16, ㅠ: 17, ㅡ: 18, ㅢ: 19, ㅣ: 20
-};
-const finalMap: Record<string, number> = {
-  ㄱ: 1, ㄲ: 2, ㄳ: 3, ㄴ: 4, ㄵ: 5, ㄶ: 6, ㄷ: 7, ㄹ: 8, ㄺ: 9, ㄻ: 10, ㄼ: 11, ㄽ: 12, ㄾ: 13, ㄿ: 14, ㅀ: 15, ㅁ: 16, ㅂ: 17, ㅄ: 18, ㅅ: 19, ㅆ: 20, ㅇ: 21, ㅈ: 22, ㅊ: 23, ㅋ: 24, ㅌ: 25, ㅍ: 26, ㅎ: 27
-};
-const initials = ["ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄸ", "ㄹ", "ㅁ", "ㅂ", "ㅃ", "ㅅ", "ㅆ", "ㅇ", "ㅈ", "ㅉ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ"];
-const medials = ["ㅏ", "ㅐ", "ㅑ", "ㅒ", "ㅓ", "ㅔ", "ㅕ", "ㅖ", "ㅗ", "ㅘ", "ㅙ", "ㅚ", "ㅛ", "ㅜ", "ㅝ", "ㅞ", "ㅟ", "ㅠ", "ㅡ", "ㅢ", "ㅣ"];
-const finals = ["", "ㄱ", "ㄲ", "ㄳ", "ㄴ", "ㄵ", "ㄶ", "ㄷ", "ㄹ", "ㄺ", "ㄻ", "ㄼ", "ㄽ", "ㄾ", "ㄿ", "ㅀ", "ㅁ", "ㅂ", "ㅄ", "ㅅ", "ㅆ", "ㅇ", "ㅈ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ"];
-const vowelPairs: Record<string, string> = {
-  "ㅗㅏ": "ㅘ", "ㅗㅐ": "ㅙ", "ㅗㅣ": "ㅚ", "ㅜㅓ": "ㅝ", "ㅜㅔ": "ㅞ", "ㅜㅣ": "ㅟ", "ㅡㅣ": "ㅢ"
-};
-const finalPairs: Record<string, string> = {
-  "ㄱㅅ": "ㄳ", "ㄴㅈ": "ㄵ", "ㄴㅎ": "ㄶ", "ㄹㄱ": "ㄺ", "ㄹㅁ": "ㄻ", "ㄹㅂ": "ㄼ", "ㄹㅅ": "ㄽ", "ㄹㅌ": "ㄾ", "ㄹㅍ": "ㄿ", "ㄹㅎ": "ㅀ", "ㅂㅅ": "ㅄ"
-};
-const splitVowels: Record<string, string> = {
-  ㅘ: "ㅗㅏ", ㅙ: "ㅗㅐ", ㅚ: "ㅗㅣ", ㅝ: "ㅜㅓ", ㅞ: "ㅜㅔ", ㅟ: "ㅜㅣ", ㅢ: "ㅡㅣ"
-};
-const splitFinals: Record<string, string> = {
-  ㄳ: "ㄱㅅ", ㄵ: "ㄴㅈ", ㄶ: "ㄴㅎ", ㄺ: "ㄹㄱ", ㄻ: "ㄹㅁ", ㄼ: "ㄹㅂ", ㄽ: "ㄹㅅ", ㄾ: "ㄹㅌ", ㄿ: "ㄹㅍ", ㅀ: "ㄹㅎ", ㅄ: "ㅂㅅ"
-};
-
-function decomposeHangul(input: string) {
-  return [...input.normalize("NFC")].map((char) => {
-    const code = char.charCodeAt(0);
-    if (code < 0xac00 || code > 0xd7a3) return char;
-
-    const offset = code - 0xac00;
-    const initial = initials[Math.floor(offset / 588)];
-    const medial = medials[Math.floor((offset % 588) / 28)];
-    const final = finals[offset % 28];
-    return `${initial}${splitVowels[medial] || medial}${final ? splitFinals[final] || final : ""}`;
-  }).join("");
-}
-
-export function composeHangul(input: string) {
-  const chars = [...decomposeHangul(input)];
-  let result = "";
-
-  for (let index = 0; index < chars.length; index += 1) {
-    const initial = chars[index];
-    let medial = chars[index + 1];
-
-    if (!(initial in initialMap) || !(medial in medialMap)) {
-      result += initial;
-      continue;
-    }
-
-    const pairedVowel = vowelPairs[`${medial}${chars[index + 2] || ""}`];
-    if (pairedVowel) {
-      medial = pairedVowel;
-      index += 1;
-    }
-
-    let final = "";
-    const next = chars[index + 2];
-    const afterNext = chars[index + 3];
-    if (next && next in finalMap && !(afterNext in medialMap)) {
-      final = next;
-      const pairedFinal = finalPairs[`${next}${afterNext || ""}`];
-      if (pairedFinal && !(chars[index + 4] in medialMap)) {
-        final = pairedFinal;
-        index += 1;
-      }
-      index += 1;
-    }
-
-    result += String.fromCharCode(0xac00 + (initialMap[initial] * 21 + medialMap[medial]) * 28 + (final ? finalMap[final] : 0));
-    index += 1;
-  }
-
-  return result;
 }
 
 export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyColorMode }: Props) {
@@ -169,6 +91,7 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
   const sliderLeft = useRef(0);
   const textDraft = useRef("");
   const [hasText, setHasText] = useState(false);
+  const [characterCount, setCharacterCount] = useState(0);
   const [mood, setMood] = useState<Mood | null>(null);
   const [category, setCategory] = useState<EntryCategory>("other");
   const [categoryTouched, setCategoryTouched] = useState(false);
@@ -211,22 +134,19 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
   });
 
   const updateDraft = (next: string) => {
-    const composed = [...composeHangul(next)].slice(0, MAX_ENTRY_TEXT_LENGTH).join("");
-    textDraft.current = composed;
-    if (composed !== next) {
-      requestAnimationFrame(() => inputRef.current?.setNativeProps({ text: composed }));
-    }
-    const nextHasText = Boolean(composed.trim());
+    textDraft.current = next;
+    setCharacterCount(entryTextLength(next));
+    const nextHasText = Boolean(next.trim());
     setHasText((current) => (current === nextHasText ? current : nextHasText));
-    if (!categoryTouched) setCategory(suggestEntryCategory(composed));
+    if (!categoryTouched) setCategory(suggestEntryCategory(next));
   };
 
   const replaceInputText = (next: string) => {
-    const composed = [...composeHangul(next)].slice(0, MAX_ENTRY_TEXT_LENGTH).join("");
-    textDraft.current = composed;
-    inputRef.current?.setNativeProps({ text: composed });
-    setHasText(Boolean(composed.trim()));
-    if (!categoryTouched) setCategory(suggestEntryCategory(composed));
+    textDraft.current = next;
+    setCharacterCount(entryTextLength(next));
+    inputRef.current?.setNativeProps({ text: next });
+    setHasText(Boolean(next.trim()));
+    if (!categoryTouched) setCategory(suggestEntryCategory(next));
   };
 
   return (
@@ -236,23 +156,31 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
       lead={"지금 이 순간의 생각과 감정을 솔직하게 남겨봐.\n그 기록이 미래의 너에게 의미로 돌아올 거야."}
       dismissKeyboardOnTouchOutside
     >
-      <TextInput
-        ref={inputRef}
-        multiline
-        placeholder={placeholder}
-        maxLength={MAX_ENTRY_TEXT_LENGTH}
-        onChangeText={updateDraft}
-        placeholderTextColor={theme.muted}
-        style={[
-          styles.textarea,
-          {
-            borderColor: theme.border,
-            backgroundColor: theme.card,
-            color: theme.text
-          }
-        ]}
-        textAlignVertical="top"
-      />
+      <View style={styles.textareaGroup}>
+        <TextInput
+          ref={inputRef}
+          multiline
+          placeholder={placeholder}
+          maxLength={MAX_ENTRY_TEXT_LENGTH}
+          onChangeText={updateDraft}
+          placeholderTextColor={theme.muted}
+          style={[
+            styles.textarea,
+            {
+              borderColor: theme.border,
+              backgroundColor: theme.card,
+              color: theme.text
+            }
+          ]}
+          textAlignVertical="top"
+        />
+        <Text
+          style={[styles.characterCount, { color: theme.muted }]}
+          accessibilityLabel={`현재 글자 수 ${characterCount}, 최대 ${MAX_ENTRY_TEXT_LENGTH}`}
+        >
+          {characterCount} / {MAX_ENTRY_TEXT_LENGTH}
+        </Text>
+      </View>
 
       <View style={styles.hints}>
         {hints.map(([label, prompt]) => (
@@ -329,7 +257,7 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
           </View>
           <View style={styles.sliderTicks}>
             {energyLevels.map((level) => (
-              <View key={level.value} style={styles.sliderTickButton}>
+              <View key={level.value} style={[styles.sliderTickButton, { left: `${level.value}%` }]}>
                 <View style={[styles.sliderTick, { backgroundColor: theme.border }, energyValue >= level.value && { backgroundColor: energyLevel.color }]} />
               </View>
             ))}
@@ -353,7 +281,7 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
         </View>
         <View style={styles.sliderLabels}>
           {energyLevels.map((level) => (
-            <Text key={level.value} style={[styles.sliderLabel, { color: theme.muted }]}>{level.value}</Text>
+            <Text key={level.value} style={[styles.sliderLabel, { color: theme.muted, left: `${level.value}%` }]}>{level.value}</Text>
           ))}
         </View>
       </View>
@@ -485,25 +413,51 @@ function MoodGroup({
         </Pressable>
       </View>
       <View style={styles.chips}>
-        {moods.map((item) => (
-          <Pressable
-            key={item.key}
-            style={[
-              styles.chip,
-              { borderColor: themeBorder, backgroundColor: themeCardAlt },
-              selected === item.key && { borderColor: themeTint, backgroundColor: themeSoft }
-            ]}
-            onPress={() => onSelect(item.key)}
-          >
-            <Text style={[styles.chipText, { color: themeMuted }, selected === item.key && { color: themeTint }]}>{item.label}</Text>
-          </Pressable>
-        ))}
+        {moods.map((item) => {
+          const separatorIndex = item.label.indexOf(" ");
+          const emoji = separatorIndex >= 0 ? item.label.slice(0, separatorIndex) : "";
+          const label = separatorIndex >= 0 ? item.label.slice(separatorIndex + 1) : item.label;
+
+          return (
+            <Pressable
+              key={item.key}
+              style={[
+                styles.chip,
+                styles.moodChip,
+                { borderColor: themeBorder, backgroundColor: themeCardAlt },
+                selected === item.key && { borderColor: themeTint, backgroundColor: themeSoft }
+              ]}
+              onPress={() => onSelect(item.key)}
+            >
+              {emoji ? (
+                <Text allowFontScaling={false} style={styles.moodEmoji}>
+                  {emoji}
+                </Text>
+              ) : null}
+              <Text
+                maxFontSizeMultiplier={1.2}
+                numberOfLines={1}
+                style={[
+                  styles.chipText,
+                  styles.moodChipText,
+                  { color: themeMuted },
+                  selected === item.key && { color: themeTint }
+                ]}
+              >
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  textareaGroup: {
+    gap: 6
+  },
   textarea: {
     minHeight: 150,
     padding: 16,
@@ -514,6 +468,11 @@ const styles = StyleSheet.create({
     color: "#18241b",
     fontSize: 16,
     lineHeight: 23
+  },
+  characterCount: {
+    alignSelf: "flex-end",
+    fontSize: 12,
+    fontWeight: "700"
   },
   hints: {
     flexDirection: "row",
@@ -596,6 +555,20 @@ const styles = StyleSheet.create({
     color: "#657064",
     fontWeight: "800"
   },
+  moodChip: {
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6
+  },
+  moodEmoji: {
+    fontSize: 16,
+    fontWeight: "400"
+  },
+  moodChipText: {
+    fontSize: 14,
+    lineHeight: 20
+  },
   energyPanel: {
     gap: 12,
     padding: 14,
@@ -659,14 +632,14 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     top: 0,
-    bottom: 0,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center"
+    bottom: 0
   },
   sliderTickButton: {
+    position: "absolute",
+    top: 0,
     width: 22,
     height: 42,
+    marginLeft: -11,
     alignItems: "center",
     justifyContent: "center"
   },
@@ -691,11 +664,14 @@ const styles = StyleSheet.create({
     elevation: 4
   },
   sliderLabels: {
-    flexDirection: "row",
-    justifyContent: "space-between"
+    position: "relative",
+    height: 12
   },
   sliderLabel: {
-    width: 24,
+    position: "absolute",
+    top: 0,
+    width: 28,
+    marginLeft: -14,
     color: "#657064",
     fontSize: 10,
     fontWeight: "900",

@@ -508,7 +508,7 @@ export function InboxScreen({ entries, letters, letterPaperStyle, onSavePostscri
           setSaveMessage("사진 저장 권한이 필요해.");
           Alert.alert(
             "사진 저장 권한이 필요해",
-            "아이폰 설정에서 Log Planet의 사진 추가 권한을 허용해줘.",
+            "기기 설정에서 Log Planet의 사진 저장 권한을 허용해줘.",
             [
               { text: "나중에", style: "cancel" },
               { text: "설정 열기", onPress: () => void Linking.openSettings() }

@@ -15,7 +15,6 @@ const landOutput = new PNG({ width: bare.width, height: bare.height });
 const etcOutput = new PNG({ width: bare.width, height: bare.height });
 const decoScale = 0.81225;
 const streetlightScale = 0.7695;
-const land6NeutralCenters = new Set(["853,649", "874,693", "920,726"]);
 const moodPositions = {
   land_01: { neutral: [[555,961],[538,1040],[522,1118]], negative: [[431,835],[66,865],[480,1084]], positive: [[389,735],[120,949],[177,1022]] },
   land_02: { neutral: [[453,469],[411,529],[370,603]], negative: [[172,384],[106,454],[410,580]], positive: [[352,323],[407,421],[124,626]] },
@@ -45,36 +44,42 @@ function alphaCenter(image) {
   return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
 }
 
-function place(target, file, targetWidth, center) {
+function place(target, file, targetWidth, center, slot) {
   const image = readPng(path.join(assetDir, "deco", file));
-  let assetScale = file === "deco_streetlight.png"
+  const assetScale = file === "deco_streetlight.png"
     ? streetlightScale
     : decoScale * (file === "negative_cloud3.png" ? 0.8 : 1);
-  if (file.startsWith("deco_tree_") && land6NeutralCenters.has(center.join(","))) assetScale *= 0.9;
-  const scale = (targetWidth * assetScale) / image.width;
+  const originalScale = (targetWidth * assetScale) / image.width;
+  const scale = originalScale * (slot === "land_05" || slot === "land_06" ? 0.8 : 1);
   const visibleCenter = alphaCenter(image);
+  const originalLeft = center[0] - visibleCenter.x * originalScale;
+  const originalTop = center[1] - 25 - visibleCenter.y * originalScale;
+  const left = slot === "land_05" || slot === "land_06" ? originalLeft : center[0] - visibleCenter.x * scale;
+  const top = slot === "land_05" || slot === "land_06"
+    ? originalTop + image.height * (originalScale - scale)
+    : center[1] - 25 - visibleCenter.y * scale;
   compositeScaled(
     target,
     image,
-    Math.round(center[0] - visibleCenter.x * scale),
-    Math.round(center[1] - 25 - visibleCenter.y * scale),
+    Math.round(left),
+    Math.round(top),
     scale
   );
 }
 
-function placeMood(file, targetWidth, center, isEtc) {
-  place(output, file, targetWidth, center);
-  place(isEtc ? etcOutput : landOutput, file, targetWidth, center);
+function placeMood(file, targetWidth, center, isEtc, slot) {
+  place(output, file, targetWidth, center, slot);
+  place(isEtc ? etcOutput : landOutput, file, targetWidth, center, slot);
 }
 
 Object.entries(moodPositions).forEach(([slot, groups]) => {
   const isEtc = slot === "etc_lake";
   groups.neutral.forEach((center, index) => {
-    if (isEtc) placeMood("deco_streetlight.png", 150, center, true);
-    else placeMood(...treeAssets[index % treeAssets.length], center, false);
+    if (isEtc) placeMood("deco_streetlight.png", 150, center, true, slot);
+    else placeMood(...treeAssets[index % treeAssets.length], center, false, slot);
   });
-  groups.negative.forEach((center, index) => placeMood(...cloudAssets[index % cloudAssets.length], center, isEtc));
-  groups.positive.forEach((center, index) => placeMood(...starAssets[index % starAssets.length], center, isEtc));
+  groups.negative.forEach((center, index) => placeMood(...cloudAssets[index % cloudAssets.length], center, isEtc, slot));
+  groups.positive.forEach((center, index) => placeMood(...starAssets[index % starAssets.length], center, isEtc, slot));
 });
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });

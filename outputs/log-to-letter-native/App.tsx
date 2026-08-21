@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Alert, Modal, Platform, Pressable, StatusBar as NativeStatusBar, StyleSheet, Text, View } from "react-native";
+import { Alert, ImageBackground, Linking, Modal, Platform, Pressable, StatusBar as NativeStatusBar, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import * as Notifications from "expo-notifications";
 import * as SplashScreen from "expo-splash-screen";
@@ -31,7 +31,18 @@ import {
 } from "./src/lib/notifications";
 import { deleteRemoteEntries, deleteRemoteUserData, generateDueLetters, normalizeStateIds, pullAppState, syncAppState, upsertEntry, upsertRemoteSettings } from "./src/lib/remoteSync";
 import { claimGuestStorageNotice, completeFirstRunGuide, defaultState, hasCompletedFirstRunGuide, loadAppState, removeAppState, saveAppState } from "./src/lib/storage";
-import { deleteAccount, getCurrentSession, signInWithApple, signInWithGoogle, signInWithKakao, signOut, supabase } from "./src/lib/supabase";
+import {
+  completeOAuthSessionFromInitialUrl,
+  completeOAuthSessionFromUrl,
+  deleteAccount,
+  getAuthFlowErrorCode,
+  getCurrentSession,
+  signInWithApple,
+  signInWithGoogle,
+  signInWithKakao,
+  signOut,
+  supabase
+} from "./src/lib/supabase";
 import { AppThemeProvider, cosmicTheme } from "./src/lib/theme";
 import { AppState, Entry, Letter, Mood } from "./src/types/domain";
 
@@ -42,6 +53,7 @@ const topSafePadding = Platform.select({
 });
 
 const LETTER_ARCHIVE_ENABLED = false;
+const launchBackground = require("./assets/assets_v4/continent/background.png");
 
 const tabHeaderMeta: Record<TabKey, { eyebrow: string; title: string; lead: string }> = {
   universe: { eyebrow: "PLANET", title: "행성", lead: "기록이 쌓이면 나만의 행성이 돼." },
@@ -69,6 +81,12 @@ function dateKey(value: string | Date) {
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   const date = typeof value === "string" ? new Date(value) : value;
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function monthKeyWithOffset(offset: number) {
+  const now = new Date();
+  const date = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function currentAppDate(state: AppState) {
@@ -455,12 +473,14 @@ export default function App() {
   const [notificationStatus, setNotificationStatus] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [calendarFocusDate, setCalendarFocusDate] = useState<string | undefined>();
+  const [universeMonthFocusRequest, setUniverseMonthFocusRequest] = useState<{ monthKey: string; requestId: number } | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [storageUserId, setStorageUserId] = useState<string | null | undefined>(undefined);
   const [authChoiceVisible, setAuthChoiceVisible] = useState(false);
   const [guestBrowsePromptVisible, setGuestBrowsePromptVisible] = useState(false);
   const [firstRunGuideVisible, setFirstRunGuideVisible] = useState(false);
   const [firstRunGuideResolved, setFirstRunGuideResolved] = useState(false);
+  const [launchScreenVisible, setLaunchScreenVisible] = useState(true);
   const [guestBrowseTimerReady, setGuestBrowseTimerReady] = useState(false);
   const activeUserIdRef = useRef<string | null | undefined>(undefined);
   const scopeRequestRef = useRef(0);
@@ -474,8 +494,16 @@ export default function App() {
 
   useEffect(() => {
     const openNotificationTarget = (response: Notifications.NotificationResponse | null) => {
-      if (response?.notification.request.content.data?.screen !== "capture") return;
-      setTab("capture");
+      const data = response?.notification.request.content.data;
+      if (data?.screen === "capture") {
+        setTab("capture");
+      } else if (data?.screen === "universe") {
+        const monthOffset = typeof data.monthOffset === "number" ? data.monthOffset : -1;
+        setUniverseMonthFocusRequest({ monthKey: monthKeyWithOffset(monthOffset), requestId: Date.now() });
+        setTab("universe");
+      } else {
+        return;
+      }
       setMenuOpen(false);
     };
 
@@ -501,7 +529,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (firstRunGuideResolved) void SplashScreen.hideAsync();
+    if (!firstRunGuideResolved) return;
+
+    let hideTimer: ReturnType<typeof setTimeout> | undefined;
+    void SplashScreen.hideAsync().finally(() => {
+      hideTimer = setTimeout(() => setLaunchScreenVisible(false), 1000);
+    });
+
+    return () => {
+      if (hideTimer) clearTimeout(hideTimer);
+    };
   }, [firstRunGuideResolved]);
 
   const activateLocalScope = async (nextUser: User | null, migrateLegacy = false, providedState?: AppState) => {
@@ -522,13 +559,25 @@ export default function App() {
   };
 
   useEffect(() => {
-    getCurrentSession()
+    completeOAuthSessionFromInitialUrl()
+      .then((initialSession) => initialSession || getCurrentSession())
       .then((session) => activateLocalScope(session?.user || null, true))
-      .catch(() => activateLocalScope(null, true));
+      .catch((error) => {
+        const code = getAuthFlowErrorCode(error) || "SESSION_BOOTSTRAP_FAILED";
+        console.error("[AUTH] session bootstrap failed", { code, errorName: error instanceof Error ? error.name : "UnknownError" });
+        setAuthError(error instanceof Error ? error.message : "로그인 상태를 확인하지 못했어.");
+        return getCurrentSession()
+          .then((session) => activateLocalScope(session?.user || null, true))
+          .catch(() => activateLocalScope(null, true));
+      });
 
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("[AUTH] state changed", { event, hasSession: Boolean(session) });
       if (event === "INITIAL_SESSION") return;
-      if (event === "SIGNED_IN" && loginInProgressRef.current) return;
+      if (event === "SIGNED_IN" && loginInProgressRef.current) {
+        console.log("[AUTH] state change deferred to login handler", { event });
+        return;
+      }
       const nextUser = session?.user || null;
       const nextUserId = nextUser?.id || null;
       if (activeUserIdRef.current === nextUserId) {
@@ -538,8 +587,40 @@ export default function App() {
       void activateLocalScope(nextUser);
     });
 
+    const linkingSubscription = Linking.addEventListener("url", ({ url }) => {
+      void completeOAuthSessionFromUrl(url)
+        .then((session) => {
+          if (!session?.user) return;
+          if (loginInProgressRef.current || activeUserIdRef.current === undefined) {
+            console.log("[AUTH] global callback state update deferred", {
+              loginInProgress: loginInProgressRef.current,
+              bootstrapPending: activeUserIdRef.current === undefined
+            });
+            return;
+          }
+          setAuthError(null);
+          setAuthChoiceVisible(false);
+          if (activeUserIdRef.current === session.user.id) {
+            setUser(session.user);
+            return;
+          }
+          void activateLocalScope(session.user);
+        })
+        .catch((error) => {
+          const code = getAuthFlowErrorCode(error) || "GLOBAL_CALLBACK_FAILED";
+          console.error("[AUTH] global callback failed", {
+            code,
+            errorName: error instanceof Error ? error.name : "UnknownError"
+          });
+          if (!loginInProgressRef.current) {
+            setAuthError(error instanceof Error ? error.message : "로그인 응답을 처리하지 못했어.");
+          }
+        });
+    });
+
     return () => {
       data.subscription.unsubscribe();
+      linkingSubscription.remove();
     };
   }, []);
 
@@ -712,11 +793,15 @@ export default function App() {
     setAuthLoading(true);
     setAuthError(null);
     loginInProgressRef.current = true;
+    let authenticatedSession: Session | null = null;
     try {
       const session = await signIn();
+      authenticatedSession = session;
+      console.log("[AUTH] login handler received session", { hasSession: Boolean(session), hasUser: Boolean(session?.user) });
       if (session?.user) {
         setAuthChoiceVisible(false);
         const guestState = await loadAppState(null);
+        console.log("[AUTH] local account initialization started", { hasGuestEntries: guestState.entries.length > 0 });
         const shouldImport = guestState.entries.length
           ? await confirmGuestEntryImport(guestState.entries.length)
           : false;
@@ -743,8 +828,23 @@ export default function App() {
         } else {
           await activateLocalScope(session.user);
         }
+        console.log("[AUTH] local account initialization completed", { hasUser: true });
       }
     } catch (error) {
+      const code = getAuthFlowErrorCode(error) || "APP_STATE_INIT_FAILED";
+      console.error("[AUTH] login handler failed", { code, hasSession: Boolean(authenticatedSession), errorName: error instanceof Error ? error.name : "UnknownError" });
+
+      if (authenticatedSession?.user && activeUserIdRef.current !== authenticatedSession.user.id) {
+        try {
+          await activateLocalScope(authenticatedSession.user);
+          console.log("[AUTH] session state recovered after initialization failure", { hasUser: true });
+        } catch (recoveryError) {
+          console.error("[AUTH] session state recovery failed", {
+            code: "APP_STATE_RECOVERY_FAILED",
+            errorName: recoveryError instanceof Error ? recoveryError.name : "UnknownError"
+          });
+        }
+      }
       setAuthError(error instanceof Error ? error.message : "로그인에 실패했어.");
     } finally {
       loginInProgressRef.current = false;
@@ -926,7 +1026,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!hydrated || !state.settings.enabled) return;
+    if (!hydrated) return;
     applyNotificationSettings(state.settings);
   }, [hydrated]);
 
@@ -938,6 +1038,7 @@ export default function App() {
         isLoggedIn={Boolean(user)}
         loginLoading={authLoading}
         onLogin={() => setAuthChoiceVisible(true)}
+        monthFocusRequest={hydrated ? universeMonthFocusRequest : null}
       />
     ),
     capture: <CaptureScreen onAddEntry={addEntry} getNow={() => nowForState(state)} energyColorMode={state.energyColorMode} />,
@@ -1198,6 +1299,20 @@ export default function App() {
             </Pressable>
           </Pressable>
         </Modal>
+        {launchScreenVisible ? (
+          <ImageBackground
+            source={launchBackground}
+            resizeMode="cover"
+            style={styles.launchScreen}
+            accessibilityLabel="Log Planet 시작 화면"
+          >
+            <StatusBar hidden />
+            <View style={styles.launchCopy}>
+              <Text style={styles.launchTitle}>Log Planet</Text>
+              <Text style={styles.launchSubtitle}>기록으로 완성되는 나만의 행성</Text>
+            </View>
+          </ImageBackground>
+        ) : null}
         </View>
       </AppThemeProvider>
     </SafeAreaProvider>
@@ -1205,6 +1320,32 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  launchScreen: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1000,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#070d2a"
+  },
+  launchCopy: {
+    alignItems: "center",
+    paddingHorizontal: 24
+  },
+  launchTitle: {
+    color: "#ffffff",
+    fontSize: 36,
+    lineHeight: 44,
+    fontWeight: "900",
+    textAlign: "center"
+  },
+  launchSubtitle: {
+    marginTop: 10,
+    color: "#d8ebff",
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: "700",
+    textAlign: "center"
+  },
   safe: {
     flex: 1,
     backgroundColor: "#070d2a"

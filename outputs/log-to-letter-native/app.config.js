@@ -21,19 +21,31 @@ const variants = {
 
 const appVariant = process.env.APP_VARIANT || "development";
 const identity = variants[appVariant] || variants.development;
+const productionAndroidAppLink = {
+  action: "VIEW",
+  autoVerify: true,
+  data: [
+    {
+      scheme: "https",
+      host: "youarejinlee-cell.github.io",
+      pathPrefix: "/logtoletter/auth/callback"
+    }
+  ],
+  category: ["BROWSABLE", "DEFAULT"]
+};
 
 module.exports = {
   expo: {
     name: identity.name,
     slug: "log-to-letter",
     scheme: identity.scheme,
-    version: "0.1.0",
+    version: "0.1.1",
     orientation: "portrait",
     icon: "./assets/assets_v4/app-logo/logo_v2.png",
     userInterfaceStyle: "light",
     splash: {
-      image: "./assets/splash.png",
-      resizeMode: "contain",
+      image: "./assets/assets_v4/continent/background.png",
+      resizeMode: "cover",
       backgroundColor: "#070d2a"
     },
     ios: {
@@ -50,7 +62,6 @@ module.exports = {
       }
     },
     android: {
-      versionCode: 1,
       blockedPermissions: [
         "android.permission.RECORD_AUDIO",
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -63,6 +74,7 @@ module.exports = {
         foregroundImage: "./assets/assets_v4/app-logo/logo_v2.png",
         backgroundColor: "#070d2a"
       },
+      intentFilters: appVariant === "production" ? [productionAndroidAppLink] : [],
       package: identity.androidPackage
     },
     plugins: [
@@ -85,9 +97,9 @@ module.exports = {
       [
         "expo-splash-screen",
         {
-          image: "./assets/splash.png",
+          image: "./assets/assets_v4/continent/background.png",
           backgroundColor: "#070d2a",
-          imageWidth: 320
+          resizeMode: "cover"
         }
       ]
     ],

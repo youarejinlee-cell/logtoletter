@@ -1,10 +1,13 @@
-import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { User } from "@supabase/supabase-js";
 import { AppleLoginButton } from "../components/AppleLoginButton";
 import { GoogleLoginButton, KakaoLoginButton } from "../components/KakaoLoginButton";
 import { Screen } from "../components/Screen";
+import { getUserAvatarUrl, getUserDisplayName } from "../lib/profile";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { useAppTheme } from "../lib/theme";
+
+const defaultProfileImage = require("../../assets/assets_v4/app-logo/logo_v2.png");
 
 type Props = {
   user: User | null;
@@ -34,8 +37,9 @@ export function AccountScreen({
   onSignOut
 }: Props) {
   const theme = useAppTheme();
-  const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split("@")[0] || "Log Planet";
-  const avatarUrl = user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
+  const loginProviders = Platform.OS === "ios" ? "Apple, 카카오 또는 Google" : "카카오 또는 Google";
+  const displayName = user ? getUserDisplayName(user) : "Log Planet";
+  const avatarUrl = user ? getUserAvatarUrl(user) : null;
 
   return (
     <Screen eyebrow="Account" title="계정" lead="로그인과 데이터 관리를 여기에서 할 수 있어.">
@@ -46,9 +50,7 @@ export function AccountScreen({
               {avatarUrl ? (
                 <Image source={{ uri: avatarUrl }} style={styles.avatar} />
               ) : (
-                <View style={[styles.avatarFallback, { backgroundColor: theme.soft }]}>
-                  <Text style={[styles.avatarText, { color: theme.tint }]}>{displayName.slice(0, 1)}</Text>
-                </View>
+                <Image source={defaultProfileImage} style={styles.avatar} />
               )}
               <View style={styles.profileText}>
                 <Text style={styles.name}>{displayName}</Text>
@@ -92,7 +94,7 @@ export function AccountScreen({
           <>
             <Text style={styles.name}>계정 연결</Text>
             <Text style={styles.description}>
-              {isSupabaseConfigured ? "Apple, 카카오 또는 Google 계정으로 연결하면 기록을 서버에 동기화할 수 있어." : "Supabase 설정을 넣으면 계정 로그인을 쓸 수 있어."}
+              {isSupabaseConfigured ? `${loginProviders} 계정으로 연결하면 기록을 서버에 동기화할 수 있어.` : "Supabase 설정을 넣으면 계정 로그인을 쓸 수 있어."}
             </Text>
             {error ? <Text style={styles.error}>{error}</Text> : null}
             <AppleLoginButton loading={loading} onPress={onAppleLogin} />
@@ -131,17 +133,6 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 999
-  },
-  avatarFallback: {
-    width: 54,
-    height: 54,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 999
-  },
-  avatarText: {
-    fontSize: 22,
-    fontWeight: "900"
   },
   profileText: {
     flex: 1,

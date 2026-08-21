@@ -1,4 +1,5 @@
 .DS_Store
+.idea/
 
 # Local credentials
 outputs/thought-letter-mvp/client_secret_*.json
@@ -16,6 +17,11 @@ outputs/log-to-letter-native/.env
 outputs/log-to-letter-native/.env.local
 outputs/log-to-letter-native/src/lib/supabaseConfig.ts
 outputs/log-to-letter-native/src/lib/supabaseConfig.local.ts
+outputs/log-to-letter-native/src/lib/*_backup_*.ts
+outputs/log-to-letter-native/android/
+outputs/log-to-letter-native/.idea/
+outputs/log-to-letter-native/screenshot/
+outputs/log-to-letter-native.zip
 
 # Log Planet generated previews and local source backups
 outputs/log-to-letter-native/tmp/

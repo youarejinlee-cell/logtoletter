@@ -3,6 +3,7 @@ import { AppState, Entry, Letter, Mood, NotificationSettings } from "../types/do
 import { categoryForEntry, normalizeEntryCategory } from "./entryCategories";
 import { normalizeEnergyPercent } from "./energyColors";
 import { createId, isUuid } from "./ids";
+import { getUserDisplayName } from "./profile";
 import { normalizeColorTheme, normalizeLetterPaperStyle, normalizeMonthlyNotes } from "./storage";
 import { supabase } from "./supabase";
 
@@ -198,7 +199,7 @@ export async function upsertProfile(user: User) {
   const { error } = await supabase.from("profiles").upsert({
     user_id: user.id,
     email: user.email,
-    display_name: user.user_metadata?.full_name || user.user_metadata?.name || user.email,
+    display_name: getUserDisplayName(user),
     updated_at: new Date().toISOString()
   }, { onConflict: "user_id" });
   if (error) throw error;
@@ -274,8 +275,12 @@ export async function pullAppState(userId: string, local: AppState): Promise<App
 export async function syncAppState(user: User, local: AppState): Promise<AppState> {
   try {
     await upsertProfile(user);
+    console.log("[AUTH] profile initialization completed", { hasProfile: true });
   } catch (error) {
-    console.warn("Supabase profile upsert skipped", error);
+    console.warn("[AUTH] profile initialization failed", {
+      code: "PROFILE_INIT_FAILED",
+      errorName: error instanceof Error ? error.name : "UnknownError"
+    });
   }
   const normalized = await pushAppState(user.id, local);
   return pullAppState(user.id, normalized);

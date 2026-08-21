@@ -13,20 +13,22 @@
 /outputs/log-to-letter-pre-planet/
 /outputs/thought-letter-expo/
 /outputs/thought-letter-mvp/
+/outputs/log-to-letter-native.zip
 
 outputs/log-to-letter-native/node_modules/
 outputs/log-to-letter-native/.expo/
 outputs/log-to-letter-native/dist/
 outputs/log-to-letter-native/tmp/
+outputs/log-to-letter-native/android/
 outputs/log-to-letter-native/*.log
 outputs/log-to-letter-native/.env
 outputs/log-to-letter-native/.env.local
-outputs/log-to-letter-native/assets/universe_continent_v3/**
-outputs/log-to-letter-native/assets/universe-color-version/**
-outputs/log-to-letter-native/assets/universe-nature-version/**
-outputs/log-to-letter-native/assets/_continent_edge_backups/**
-outputs/log-to-letter-native/assets/_incoming_continent_originals/**
-outputs/log-to-letter-native/assets/_incoming_continent_transparent_originals/**
+/outputs/log-to-letter-native/assets/universe_continent_v3/
+/outputs/log-to-letter-native/assets/universe-color-version/
+/outputs/log-to-letter-native/assets/universe-nature-version/
+/outputs/log-to-letter-native/assets/_continent_edge_backups/
+/outputs/log-to-letter-native/assets/_incoming_continent_originals/
+/outputs/log-to-letter-native/assets/_incoming_continent_transparent_originals/
 outputs/log-to-letter-native/assets/universe-planet-*
 outputs/log-to-letter-native/assets/universe-continent-*
 outputs/log-to-letter-native/assets/concept_reference.png
@@ -38,3 +40,4 @@ outputs/log-to-letter-native/assets/letter-envelope-base.png
 outputs/log-to-letter-native/assets/letter-archive-icon.png
 outputs/log-to-letter-native/assets/letter-archive-icon-compact.png
 outputs/log-to-letter-native/bgm/*.band/**
+/outputs/log-to-letter-native/screenshot/

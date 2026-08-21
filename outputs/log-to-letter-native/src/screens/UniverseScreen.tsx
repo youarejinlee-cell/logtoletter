@@ -13,6 +13,7 @@ type Props = {
   isLoggedIn: boolean;
   loginLoading?: boolean;
   onLogin: () => void;
+  monthFocusRequest?: { monthKey: string; requestId: number } | null;
 };
 
 type MoodBiome = "calm" | "grateful" | "proud" | "excited" | "anxious" | "other";
@@ -326,7 +327,7 @@ const v4DecoAssets: V4DecoSpec[] = [
   { key: "astronaut-1", source: require("../../assets/assets_v4/deco/deco_astronaut_1.png"), layer: "boundary", center: { x: 1005, y: 335 }, width: 230, aspectRatio: 1 },
   { key: "astronaut-2", source: require("../../assets/assets_v4/deco/deco_astronaut_2.png"), layer: "boundary", center: { x: 125, y: 1230 }, width: 230, aspectRatio: 1 },
   { key: "airship", source: require("../../assets/assets_v4/deco/deco_airship.png"), layer: "foreground", center: { x: 335, y: 1335 }, width: 296, aspectRatio: 1 },
-  { key: "pirateship", source: require("../../assets/assets_v4/deco/deco_pirateship.png"), layer: "foreground", center: { x: 975, y: 1040 }, width: 350, aspectRatio: 1 },
+  { key: "pirateship", source: require("../../assets/assets_v4/deco/deco_pirateship.png"), layer: "foreground", center: { x: 975, y: 1140 }, width: 350, aspectRatio: 1 },
   { key: "seagull-1", source: require("../../assets/assets_v4/deco/deco_seagull_1.png"), layer: "foreground", center: { x: 525, y: 790 }, width: 115, aspectRatio: 1.5 },
   { key: "seagull-2", source: require("../../assets/assets_v4/deco/deco_seagull_2.png"), layer: "foreground", center: { x: 610, y: 745 }, width: 125, aspectRatio: 1.5 }
 ];
@@ -393,7 +394,7 @@ function activeV4MoodDeco(visible: ContinentSlice[], data: ReturnType<typeof bui
       const source = slot === "etc_lake" && group === "neutral"
         ? v4StreetlightMoodAsset
         : v4MoodDecoAssets[group][index % v4MoodDecoAssets[group].length];
-      const slotScale = slot === "land_06" && group === "neutral" ? 0.9 : 1;
+      const slotScale = slot === "land_05" || slot === "land_06" ? 0.8 : 1;
       return { ...source, width: source.width * slotScale, key: `${slot}-${group}-${index}`, center: { x: center.x, y: center.y - 25 }, group, slot };
     });
   }));
@@ -626,6 +627,17 @@ const v4Slots: Record<V4SlotKey, V4SlotSpec> = {
   }
 };
 
+// User-confirmed detail windows, measured in the 1126 x 1397 planet coordinate system.
+const v4DetailFocusBounds: Record<V4SlotKey, ContinentBounds> = {
+  land_01: { x: 25, y: 643, width: 540, height: 541 },
+  land_02: { x: 34, y: 246, width: 457, height: 454 },
+  land_03: { x: 557, y: 243, width: 421, height: 420 },
+  land_04: { x: 379, y: 114, width: 472, height: 291 },
+  land_05: { x: 659, y: 782, width: 368, height: 368 },
+  land_06: { x: 791, y: 526, width: 301, height: 301 },
+  etc_lake: { x: 429, y: 496, width: 435, height: 434 }
+};
+
 const v4RankSlots: V4SlotKey[] = ["land_01", "land_02", "land_03", "land_04", "land_05", "land_06"];
 const v4EtcHitZones: ContinentBounds[] = [
   { x: 350, y: 260, width: 105, height: 165 },
@@ -839,46 +851,47 @@ const finalV4PlacementAdjustments: Record<Exclude<V4Category, "etc">, V4Placemen
     land_01: { 3: { scale: 0.95 }, 4: { x: -25 } },
     land_03: { 3: { x: 50, scale: 0.9 }, 4: { x: 50 } },
     land_04: { 2: { y: -25, scale: 0.95 } },
-    land_05: { 2: { x: 25, scale: 0.95 }, 3: { scale: 0.9 }, 4: { x: 25 } },
-    land_06: { 1: { y: -25, scale: 1.1 }, 2: { x: 50 }, 3: { x: 50 }, 4: { x: 50 } }
+    land_05: { 2: { x: 25, scale: 0.95 }, 3: { x: 25, scale: 0.81 }, 4: { x: 50 } },
+    land_06: { 1: { y: -25, scale: 1.1 }, 2: { x: 50, y: -25 }, 3: { x: 25, scale: 0.9 }, 4: { x: 65 } }
   },
   taste: {
     land_02: { 4: { x: -50, scale: 0.9 } },
-    land_03: { 2: { x: 50, scale: 1.05 }, 3: { x: 25 }, 4: { x: 25 } },
-    land_04: { 2: { y: -25, scale: 0.95 } },
-    land_05: { 1: { y: -25 }, 2: { x: 30 }, 3: { x: 50 }, 4: { x: 25 } },
-    land_06: { 1: { y: -25 }, 3: { x: 50 }, 4: { x: 50, y: 25 } }
+    land_03: { 2: { scale: 1.05 }, 3: { x: 25, y: -25 }, 4: { x: 25 } },
+    land_04: { 2: { x: 25, y: -25, scale: 0.95 }, 3: { x: 30 } },
+    land_05: { 1: { y: -25 }, 2: { x: 30 }, 3: { x: 75 }, 4: { x: 50 } },
+    land_06: { 1: { y: -25 }, 2: { y: -30 }, 3: { x: 35, y: -40 }, 4: { x: 50, y: -25 } }
   },
   relationship: {
     land_01: { 2: { scale: 0.95 }, 4: { x: -25, scale: 1.1 } },
-    land_02: { 1: { x: -50 }, 2: { x: -50 }, 3: { x: -50 }, 4: { x: -50 } },
+    land_02: { 1: { y: 25 }, 2: { x: -50, y: 25 }, 3: { x: -15 }, 4: { x: -50 } },
     land_03: { 2: { y: -25, scale: 1.05 }, 3: { x: 25 }, 4: { x: 25 } },
-    land_05: { 2: { y: -25, scale: 1.05 }, 3: { x: 50 }, 4: { x: 50 } },
-    land_06: { 1: { x: 10 }, 2: { x: 50 }, 3: { x: 50 }, 4: { x: 50 } }
+    land_04: { 2: { x: 25 }, 3: { x: -25 }, 4: { scale: 0.8 } },
+    land_05: { 2: { y: -25, scale: 1.05 }, 3: { x: 165, scale: 1.1 }, 4: { x: 50 } },
+    land_06: { 1: { x: 10 }, 2: { x: 50 }, 3: { x: 50, y: -25 }, 4: { x: 75, y: -15 } }
   },
   "self-discipline": {
     land_01: { 1: { x: -50, y: -50 }, 2: { x: -50, scale: 0.95 }, 4: { x: -25, y: -25 } },
     land_02: { 2: { scale: 0.9 }, 4: { x: -50, scale: 0.9 } },
-    land_03: { 1: { y: -25 }, 3: { x: 25 }, 4: { x: 50 } },
+    land_03: { 1: { y: -25 }, 3: { x: 25 }, 4: { x: 50, scale: 0.9 } },
     land_04: { 2: { scale: 0.95 }, 4: { scale: 0.95 } },
-    land_05: { 2: { scale: 0.95 }, 3: { x: 20 }, 4: { x: 50 } },
-    land_06: { 1: { y: -35 }, 2: { x: 25 }, 3: { x: 50 }, 4: { x: 50, y: 25 } }
+    land_05: { 1: { y: -25 }, 2: { x: 50, y: -25, scale: 0.95 }, 3: { x: 55 }, 4: { x: 50 } },
+    land_06: { 1: { y: -35 }, 2: { x: 25 }, 3: { x: 40, y: -35 }, 4: { x: 60, y: -10 } }
   },
   wealth: {
     land_01: { 2: { y: 50, scale: 0.9 }, 4: { x: -25 } },
     land_02: { 2: { scale: 0.85 }, 4: { x: -70 } },
-    land_03: { 2: { y: -50, scale: 0.95 }, 3: { x: 25, y: -25 }, 4: { x: 25 } },
+    land_03: { 1: { y: -25 }, 2: { y: -75, scale: 0.95 }, 3: { x: 25, y: -50 }, 4: { x: 25, y: -25 } },
     land_04: { 2: { scale: 0.95 } },
-    land_05: { 2: { x: 25, scale: 0.95 }, 3: { x: 25, scale: 1.05 }, 4: { x: 50 } },
-    land_06: { 2: { x: 100 }, 4: { x: 50, y: 50 } }
+    land_05: { 2: { x: 25, scale: 0.855 }, 3: { x: 50, scale: 1.05 }, 4: { x: 50, scale: 0.9 } },
+    land_06: { 2: { x: 100 }, 3: { x: -25 }, 4: { x: 50, y: 20 } }
   },
   health: {
     land_01: { 1: { y: -25 } },
     land_02: { 3: { y: -25, scale: 0.9 }, 4: { x: -50, scale: 0.9 } },
     land_03: { 2: { y: -25 }, 3: { x: 25 }, 4: { x: 25 } },
-    land_04: { 2: { y: -25 }, 4: { scale: 0.95 } },
-    land_05: { 1: { x: 25 }, 2: { x: 25, y: -25 }, 3: { x: 25 }, 4: { x: 25 } },
-    land_06: { 1: { x: 25 }, 2: { x: 25 }, 3: { x: 25 }, 4: { x: 50, y: 25 } }
+    land_04: { 2: { y: -25 }, 4: { scale: 0.76 } },
+    land_05: { 1: { x: 50, y: -25 }, 2: { x: 25, y: -25 }, 3: { x: 75 }, 4: { x: 25, scale: 0.855 } },
+    land_06: { 1: { x: 25 }, 2: { x: 25 }, 3: { x: 25 }, 4: { x: 55, y: 25, scale: 0.9 } }
   }
 };
 
@@ -1063,7 +1076,7 @@ function buildScenarioEntries(scenarioIndex: number, monthKey: string): Entry[] 
   return entries;
 }
 
-export function UniverseScreen({ entries, guestEntryCount = 0, isLoggedIn, loginLoading, onLogin }: Props) {
+export function UniverseScreen({ entries, guestEntryCount = 0, isLoggedIn, loginLoading, onLogin, monthFocusRequest }: Props) {
   const [rotationIndex, setRotationIndex] = useState(0);
   const [selectedCategoryKey, setSelectedCategoryKey] = useState<V4Category | null>(null);
   const [selectedMonthKey, setSelectedMonthKey] = useState(() => latestMonthKey(entries));
@@ -1172,6 +1185,13 @@ export function UniverseScreen({ entries, guestEntryCount = 0, isLoggedIn, login
     setSelectedMonthKey((current) => monthKeys.includes(current) ? current : latestMonthKey(entries));
   }, [entries, monthKeys]);
 
+  useEffect(() => {
+    if (!monthFocusRequest) return;
+    setSelectedMonthKey(monthFocusRequest.monthKey);
+    setSelectedCategoryKey(null);
+    setRotationIndex(0);
+  }, [monthFocusRequest]);
+
   const rotatePlanet = (direction: number) => {
     setRotationIndex((current) => {
       if (continents.length <= 6) return 0;
@@ -1211,7 +1231,7 @@ export function UniverseScreen({ entries, guestEntryCount = 0, isLoggedIn, login
       if (!permission.granted) {
         Alert.alert(
           "사진 저장 권한이 필요해",
-          "아이폰 설정에서 Log Planet의 사진 추가 권한을 허용해줘.",
+          "기기 설정에서 Log Planet의 사진 저장 권한을 허용해줘.",
           [
             { text: "나중에", style: "cancel" },
             { text: "설정 열기", onPress: () => void Linking.openSettings() }
@@ -1712,9 +1732,19 @@ function ContinentInsightOverlay({
                 </View>
               </View>
             </View>
-            <View style={styles.detailCountPill}>
-              <Text style={styles.detailCountValue}>{entries.length}</Text>
-              <Text style={styles.detailCountLabel}>기록</Text>
+            <View style={styles.detailSummaryMetrics}>
+              <View style={styles.detailCountPill}>
+                <View style={styles.detailMetricTitleSlot}>
+                  <Text style={styles.detailCountLabel}>기록 개수</Text>
+                </View>
+                <Text style={styles.detailCountValue}>{entries.length}</Text>
+              </View>
+              <View style={styles.detailCountPill}>
+                <View style={styles.detailMetricTitleSlot}>
+                  <Text style={styles.detailCountLabel}>{"사용 에너지\n(평균)"}</Text>
+                </View>
+                <Text style={styles.detailEnergyValue}>{averageEnergy(entries)}%</Text>
+              </View>
             </View>
           </View>
           <View style={styles.detailMetricCard}>
@@ -1761,15 +1791,31 @@ function CategoryPlanetCloseup({
   continents: ContinentSlice[];
   viewportWidth: number;
 }) {
+  const [loadedLayerKeys, setLoadedLayerKeys] = useState<Set<string>>(() => new Set());
   const slotKey = categoryKey === "etc" ? "etc_lake" : v4RankSlots[assetRank - 1];
   const slot = v4Slots[slotKey];
   const viewportHeight = Math.min(320, viewportWidth * 0.72);
-  const renderWidth = viewportWidth * 1.72;
+  const detailBounds = v4DetailFocusBounds[slotKey];
+  const detailScale = Math.min(viewportWidth / detailBounds.width, viewportHeight / detailBounds.height);
+  const renderWidth = V4_PLANET_WIDTH * detailScale;
   const renderHeight = renderWidth * (V4_PLANET_HEIGHT / V4_PLANET_WIDTH);
-  const stageHeight = renderHeight + 76;
-  const focusX = ((slot.box.x + slot.box.width / 2) / V4_PLANET_WIDTH) * renderWidth;
-  const focusY = 38 + ((slot.box.y + slot.box.height / 2) / V4_PLANET_HEIGHT) * renderHeight;
-  const focusTopOffset = categoryKey !== "etc" && ([1, 2, 3, 6] as UniverseContinentRank[]).includes(assetRank) ? 50 : 0;
+  const categoryCount = categoryKey === "etc"
+    ? data.etcEntries.length
+    : data.categories.get(categoryKey)?.length || 0;
+  const placement = v4PlacementFor(categoryKey, slot);
+  const selectedLayers = activeV4Levels(categoryCount).flatMap((level) => {
+    const asset = v4AssetFor(categoryKey, level, placement.sides[level]);
+    if (!asset) return [];
+    const frame = v4LayerFrame(slot, placement, asset, level, renderWidth, renderHeight);
+    return [{ level, asset, frame }];
+  });
+  const layerLoadKey = `${categoryKey}-${slotKey}-${categoryCount}`;
+  const loadedLayerCount = [...loadedLayerKeys].filter((key) => key.startsWith(`${layerLoadKey}-`)).length;
+  const layersReady = selectedLayers.length === 0 || loadedLayerCount >= selectedLayers.length;
+  const focusX = (detailBounds.x + detailBounds.width / 2) * detailScale;
+  const focusY = (detailBounds.y + detailBounds.height / 2) * detailScale;
+  const closeupDeco = activeV4Deco(data);
+  const closeupMoodDeco = activeV4MoodDeco(continents, data).filter((asset) => asset.slot === slotKey);
 
   return (
     <View style={[styles.categoryCloseupViewport, { height: viewportHeight }]}>
@@ -1778,22 +1824,51 @@ function CategoryPlanetCloseup({
         style={{
           position: "absolute",
           left: viewportWidth / 2 - focusX,
-          top: viewportHeight / 2 - focusY + focusTopOffset,
+          top: viewportHeight / 2 - focusY,
           width: renderWidth,
-          height: stageHeight
+          height: renderHeight
         }}
       >
-        <PlanetIllustration
-          size={renderWidth}
-          data={data}
-          continents={continents}
-          rotationIndex={0}
-          onRotate={() => undefined}
-          onOpenContinent={() => undefined}
-          showChrome={false}
-          showZoomControls={false}
-        />
+        <Image source={v4BackgroundAsset} style={styles.v4UniverseBackground} resizeMode="cover" />
+        <View style={[styles.planetAssetWrap, { width: renderWidth, height: renderHeight }]}>
+          {closeupDeco.filter((asset) => asset.layer === "background").map((asset) => (
+            <Image key={asset.key} source={asset.source} style={[styles.v4DecoImage, v4DecoFrame(asset, renderWidth, renderHeight), asset.rotation ? { transform: [{ rotate: `${asset.rotation}deg` }] } : null]} resizeMode="contain" />
+          ))}
+          <Image source={v4BarePlanetAsset} style={styles.planetAssetImage} resizeMode="contain" resizeMethod="resize" />
+          {closeupDeco.filter((asset) => asset.layer === "boundary").map((asset) => (
+            <Image key={asset.key} source={asset.source} style={[styles.v4DecoImage, v4DecoFrame(asset, renderWidth, renderHeight), asset.rotation ? { transform: [{ rotate: `${asset.rotation}deg` }] } : null]} resizeMode="contain" />
+          ))}
+          <View style={[styles.continentAxisLayer, { opacity: layersReady ? 1 : 0 }]}>
+            {selectedLayers.sort((a, b) => a.level - b.level).map(({ level, asset, frame }) => (
+              <Image
+                key={`${layerLoadKey}-lv${level}`}
+                source={asset.source}
+                style={[styles.continentLayerImage, frame]}
+                resizeMode="contain"
+                resizeMethod="resize"
+                onLoadEnd={() => {
+                  const imageKey = `${layerLoadKey}-lv${level}`;
+                  setLoadedLayerKeys((current) => current.has(imageKey) ? current : new Set(current).add(imageKey));
+                }}
+              />
+            ))}
+          </View>
+          <View style={styles.continentAxisLayer}>
+            {closeupDeco.filter((asset) => asset.layer === "foreground").map((asset) => (
+              <Image key={asset.key} source={asset.source} style={[styles.v4DecoImage, v4DecoFrame(asset, renderWidth, renderHeight), asset.rotation ? { transform: [{ rotate: `${asset.rotation}deg` }] } : null]} resizeMode="contain" />
+            ))}
+            {closeupMoodDeco.map((asset) => (
+              <Image key={asset.key} source={asset.source} style={[styles.v4DecoImage, v4MoodDecoFrame(asset, renderWidth, renderHeight)]} resizeMode="contain" />
+            ))}
+          </View>
+        </View>
       </View>
+      {!layersReady ? (
+        <View style={styles.categoryCloseupLoading} pointerEvents="none">
+          <ActivityIndicator size="small" color="#bfe0ff" />
+          <Text style={styles.categoryCloseupLoadingText}>대륙 불러오는 중...</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -1931,6 +2006,17 @@ function v4DecoFrame(asset: V4DecoSpec, visualWidth: number, visualHeight: numbe
 
 function v4MoodDecoFrame(asset: V4MoodDecoSpec, visualWidth: number, visualHeight: number) {
   const scale = (asset.width / V4_PLANET_WIDTH) * visualWidth / asset.canvas.width;
+  if (asset.slot === "land_05" || asset.slot === "land_06") {
+    const originalScale = scale / 0.8;
+    const originalLeft = (asset.center.x / V4_PLANET_WIDTH) * visualWidth - asset.alphaCenter.x * originalScale;
+    const originalBottom = (asset.center.y / V4_PLANET_HEIGHT) * visualHeight - asset.alphaCenter.y * originalScale + asset.canvas.height * originalScale;
+    return {
+      left: originalLeft,
+      top: originalBottom - asset.canvas.height * scale,
+      width: asset.canvas.width * scale,
+      height: asset.canvas.height * scale
+    };
+  }
   return {
     left: (asset.center.x / V4_PLANET_WIDTH) * visualWidth - asset.alphaCenter.x * scale,
     top: (asset.center.y / V4_PLANET_HEIGHT) * visualHeight - asset.alphaCenter.y * scale,
@@ -2070,18 +2156,7 @@ function PlanetIllustration({
       }}
       {...panResponder.panHandlers}
     >
-      <View
-        style={[
-          styles.planetAssetGlow,
-          {
-            width: visualWidth * 0.95,
-            height: visualHeight * 0.82,
-            borderRadius: visualWidth,
-            transform: planetTransform
-          }
-        ]}
-      />
-        <BackgroundTwinkles />
+      <BackgroundTwinkles />
       {showBackground ? <Image source={v4BackgroundAsset} style={styles.v4UniverseBackground} resizeMode="cover" /> : null}
       <View style={[styles.planetAssetWrap, { width: visualWidth, height: visualHeight, transform: planetTransform }]}> 
         {v4Deco.filter((asset) => asset.layer === "background").map((asset) => (
@@ -2912,6 +2987,18 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#030817"
   },
+  categoryCloseupLoading: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8
+  },
+  categoryCloseupLoadingText: {
+    color: "#dcecff",
+    fontSize: 12,
+    fontWeight: "800"
+  },
   categoryDetailPanel: {
     flex: 1,
     marginTop: -1,
@@ -3022,20 +3109,41 @@ const styles = StyleSheet.create({
   },
   detailCountPill: {
     alignItems: "center",
-    minWidth: 62,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 18,
+    justifyContent: "flex-start",
+    width: 72,
+    height: 72,
+    paddingTop: 8,
+    borderRadius: 8,
     backgroundColor: "rgba(255,255,255,0.13)"
+  },
+  detailMetricTitleSlot: {
+    width: "100%",
+    height: 28,
+    alignItems: "center",
+    justifyContent: "flex-start"
+  },
+  detailSummaryMetrics: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
   },
   detailCountValue: {
     color: "#fff",
     fontSize: 22,
+    lineHeight: 27,
+    fontWeight: "900"
+  },
+  detailEnergyValue: {
+    color: "#fff",
+    fontSize: 19,
+    lineHeight: 27,
     fontWeight: "900"
   },
   detailCountLabel: {
     color: "rgba(238,242,255,0.64)",
-    fontSize: 11,
+    fontSize: 10,
+    lineHeight: 12,
+    textAlign: "center",
     fontWeight: "900"
   },
   detailMetricCard: {
@@ -3327,14 +3435,6 @@ const styles = StyleSheet.create({
     shadowRadius: 36,
     shadowOffset: { width: 0, height: 12 }
   },
-  planetAssetGlow: {
-    position: "absolute",
-    backgroundColor: "rgba(164, 148, 255, 0.14)",
-    shadowColor: "#a99cff",
-    shadowOpacity: 0.72,
-    shadowRadius: 34,
-    shadowOffset: { width: 0, height: 12 }
-  },
   planetAssetWrap: {
     position: "relative",
     alignItems: "center",
@@ -3368,8 +3468,7 @@ const styles = StyleSheet.create({
   continentHitZone: {
     position: "absolute",
     zIndex: 20,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.001)"
+    borderRadius: 999
   },
   hitZoneUpLeft: {
     left: "18%",

@@ -28,7 +28,7 @@ const globalDeco = [
   { file: "deco_astronaut_1.png", layer: "boundary", x: 1005, y: 335, width: 230 },
   { file: "deco_astronaut_2.png", layer: "boundary", x: 125, y: 1230, width: 230 },
   { file: "deco_airship.png", layer: "foreground", x: 335, y: 1335, width: 296 },
-  { file: "deco_pirateship.png", layer: "foreground", x: 975, y: 1040, width: 350 },
+  { file: "deco_pirateship.png", layer: "foreground", x: 975, y: 1140, width: 350 },
   { file: "deco_seagull_1.png", layer: "foreground", x: 525, y: 790, width: 115 },
   { file: "deco_seagull_2.png", layer: "foreground", x: 610, y: 745, width: 125 }
 ];

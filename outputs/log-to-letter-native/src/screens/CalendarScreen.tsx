@@ -4,8 +4,8 @@ import { CloverBadge } from "../components/CloverBadge";
 import { Screen } from "../components/Screen";
 import { categoryForEntry, entryCategoryLabels, entryCategoryOptions } from "../lib/entryCategories";
 import { getEnergyLevel, normalizeEnergyPercent } from "../lib/energyColors";
+import { entryTextLength, MAX_ENTRY_TEXT_LENGTH } from "../lib/entryText";
 import { AppTheme, useAppTheme } from "../lib/theme";
-import { composeHangul } from "./CaptureScreen";
 import { MoodCollectionContent } from "./MoodCollectionScreen";
 import { CalendarEnergyMode, EnergyColorMode, Entry, EntryCategory, Mood } from "../types/domain";
 
@@ -945,12 +945,8 @@ export function CalendarScreen({ entries, energyColorMode, calendarMode, targetM
     setSummaryFilter((current) => (sameSummaryFilter(current, filter) ? null : filter));
   };
   const updateMemoDraft = (next: string) => {
-    const composed = [...composeHangul(next)].slice(0, 2000).join("");
-    memoDraftRef.current = composed;
-    setMemoHasText(Boolean(composed.trim()));
-    if (composed !== next) {
-      requestAnimationFrame(() => memoInputRef.current?.setNativeProps({ text: composed }));
-    }
+    memoDraftRef.current = next;
+    setMemoHasText(Boolean(next.trim()));
   };
   const startMemoEditing = () => {
     memoDraftRef.current = savedMonthlyNote;
@@ -1393,6 +1389,7 @@ function RecordCard({
   const entryEnergy = normalizeEnergyPercent(entry.energy);
   const entryEnergyLevel = getEnergyLevel(energyColorMode, entryEnergy, theme.tint);
   const entryCategory = categoryForEntry(entry);
+  const [datePart, timePart] = dateLabel.split(" · ");
 
   const startEditing = () => {
     setDraftText(entry.text);
@@ -1440,7 +1437,10 @@ function RecordCard({
           <Text style={[styles.mood, { color: theme.text }]}>{moodLabels[entry.mood]}</Text>
         </View>
         <View style={styles.entryMetaActions}>
-          <Text style={[styles.date, { color: theme.muted }]}>{dateLabel}</Text>
+          <View style={styles.dateTime}>
+            <Text style={[styles.date, { color: theme.muted }]}>{datePart}</Text>
+            {timePart ? <Text style={[styles.date, { color: theme.muted }]}>{timePart}</Text> : null}
+          </View>
           {!selecting && onUpdateEntry && !editing ? (
             <Pressable hitSlop={8} onPress={startEditing}>
               <Text style={[styles.editActionLabel, { color: theme.tint }]}>수정</Text>
@@ -1450,14 +1450,22 @@ function RecordCard({
       </View>
       {editing ? (
         <View style={styles.entryEditBox}>
-          <TextInput
-            multiline
-            maxLength={100}
-            value={draftText}
-            onChangeText={setDraftText}
-            textAlignVertical="top"
-            style={[styles.entryEditInput, { borderColor: theme.border, backgroundColor: theme.cardAlt, color: theme.text }]}
-          />
+          <View style={styles.entryEditTextGroup}>
+            <TextInput
+              multiline
+              maxLength={MAX_ENTRY_TEXT_LENGTH}
+              value={draftText}
+              onChangeText={setDraftText}
+              textAlignVertical="top"
+              style={[styles.entryEditInput, { borderColor: theme.border, backgroundColor: theme.cardAlt, color: theme.text }]}
+            />
+            <Text
+              style={[styles.entryEditCharacterCount, { color: theme.muted }]}
+              accessibilityLabel={`현재 글자 수 ${entryTextLength(draftText)}, 최대 ${MAX_ENTRY_TEXT_LENGTH}`}
+            >
+              {entryTextLength(draftText)} / {MAX_ENTRY_TEXT_LENGTH}
+            </Text>
+          </View>
           <View style={styles.entryEditCategories}>
             {entryCategoryOptions.map((option) => (
               <Pressable
@@ -2841,8 +2849,12 @@ const styles = StyleSheet.create({
     gap: 8
   },
   entryMetaActions: {
+    flexShrink: 0,
     alignItems: "flex-end",
     gap: 4
+  },
+  dateTime: {
+    alignItems: "flex-end"
   },
   editActionLabel: {
     fontSize: 12,
@@ -2850,6 +2862,7 @@ const styles = StyleSheet.create({
   },
   moodEnergyGroup: {
     flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 8
@@ -2876,6 +2889,7 @@ const styles = StyleSheet.create({
     textAlign: "right"
   },
   mood: {
+    flexShrink: 1,
     color: "#657064",
     fontSize: 13,
     fontWeight: "800"
@@ -2896,6 +2910,9 @@ const styles = StyleSheet.create({
   entryEditBox: {
     gap: 10
   },
+  entryEditTextGroup: {
+    gap: 6
+  },
   entryEditInput: {
     minHeight: 88,
     padding: 12,
@@ -2903,6 +2920,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     fontSize: 15,
     lineHeight: 22
+  },
+  entryEditCharacterCount: {
+    alignSelf: "flex-end",
+    fontSize: 12,
+    fontWeight: "700"
   },
   entryEditCategories: {
     flexDirection: "row",
