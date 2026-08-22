@@ -39,7 +39,7 @@ module.exports = {
     name: identity.name,
     slug: "log-to-letter",
     scheme: identity.scheme,
-    version: "0.1.1",
+    version: "0.1.2",
     orientation: "portrait",
     icon: "./assets/assets_v4/app-logo/logo_v2.png",
     userInterfaceStyle: "light",
