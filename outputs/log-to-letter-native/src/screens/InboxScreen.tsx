@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Alert, Image, Linking, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { Screen } from "../components/Screen";
 import { normalizeEnergyPercent } from "../lib/energyColors";
+import { moodDisplayLabel, moodDisplayLabels } from "../lib/emotionTags";
 import { AppTheme, useAppTheme } from "../lib/theme";
 import { Entry, Letter, LetterPaperStyle, Mood } from "../types/domain";
 
@@ -14,43 +15,9 @@ type Props = {
   onSavePostscript: (letterId: string, postscript: string) => void;
 };
 
-const moodLabels: Record<Mood, string> = {
-  calm: "😌 차분함",
-  joy: "😊 좋음",
-  moved: "🥹 뭉클함",
-  recovered: "🌱 회복됨",
-  happy: "😄 행복함",
-  delight: "😁 기쁨",
-  excited: "💓 설렘",
-  fun: "😆 재밌음",
-  hopeful: "🌤️ 희망적임",
-  grateful: "🙏 고마움",
-  proud: "✨ 뿌듯함",
-  peaceful: "🕊️ 평화로움",
-  lucky: "🍀 행운",
-  selfEsteem: "💪 자존감상승",
-  soSo: "😐 그저 그럼",
-  indifferent: "😶 무덤덤함",
-  curious: "🧐 궁금함",
-  accepting: "🤲 받아들임",
-  reflective: "🪞 반성함",
-  envious: "🫧 부러움",
-  instructive: "📌 교훈적임",
-  difficult: "🧩 어려움",
-  anxious: "😟 불안함",
-  worried: "😥 걱정됨",
-  tired: "😮‍💨 피곤함",
-  sad: "😔 가라앉음",
-  depressed: "🌧️ 우울함",
-  angry: "😤 날카로움",
-  irritated: "😒 짜증남",
-  jealous: "🫣 질투",
-  prideHurt: "😣 자존심상함",
-  sensitive: "🫨 예민함",
-  regret: "😞 후회됨",
-  blank: "🫠 멍함",
-  complex: "🤔 복잡함"
-};
+const moodLabels = Object.fromEntries(
+  (Object.keys(moodDisplayLabels) as Mood[]).map((mood) => [mood, moodDisplayLabel(mood)])
+) as Record<Mood, string>;
 
 const positiveMoods = new Set<Mood>([
   "calm",

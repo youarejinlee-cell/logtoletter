@@ -3,6 +3,8 @@ node_modules/
 dist/
 tmp/
 android/
+ios/
+store-assets/
 *.log
 .env
 .env.local

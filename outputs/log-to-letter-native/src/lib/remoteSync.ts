@@ -53,6 +53,7 @@ type AppSettingsRow = {
     targetMoods?: AppState["targetMoods"];
     monthlyNotes?: AppState["monthlyNotes"];
     representativeEmotionTags?: AppState["representativeEmotionTags"];
+    notificationSettings?: NotificationSettings;
   } | null;
 };
 
@@ -166,11 +167,11 @@ function settingsToRow(userId: string, settings: NotificationSettings) {
     user_id: userId,
     enabled: settings.enabled,
     notifications_enabled: settings.enabled,
-    schedule_mode: settings.scheduleMode || "interval",
+    schedule_mode: settings.scheduleMode === "fixed" ? "fixed" : "interval",
     start_time: settings.startTime,
     interval_minutes: intervalMinutes,
-    dnd_start: settings.dndStart,
-    dnd_end: settings.dndEnd,
+    dnd_start: settings.endTime || settings.dndStart,
+    dnd_end: settings.startTime || settings.dndEnd,
     weekdays: settings.weekdays?.length ? settings.weekdays : [1, 2, 3, 4, 5, 6, 7],
     fixed_times: settings.fixedTimes?.length ? settings.fixedTimes : ["10:00"],
     timezone: "Asia/Seoul",
@@ -183,11 +184,15 @@ function rowToSettings(row: NotificationSettingsRow): NotificationSettings {
     enabled: row.enabled,
     scheduleMode: row.schedule_mode || "interval",
     startTime: row.start_time.slice(0, 5),
+    endTime: row.dnd_start.slice(0, 5),
     intervalMinutes: normalizeIntervalMinutes(row.interval_minutes),
     dndStart: row.dnd_start.slice(0, 5),
     dndEnd: row.dnd_end.slice(0, 5),
     weekdays: row.weekdays?.length ? row.weekdays : [1, 2, 3, 4, 5, 6, 7],
-    fixedTimes: row.fixed_times?.length ? row.fixed_times : ["10:00"]
+    fixedTimes: row.fixed_times?.length ? row.fixed_times : ["10:00"],
+    randomStartTime: "09:00",
+    randomEndTime: "22:00",
+    randomDailyCount: 4
   };
 }
 
@@ -235,7 +240,8 @@ export async function pushAppState(userId: string, state: AppState) {
       letterPaperStyle: normalized.letterPaperStyle,
       targetMoods: normalized.targetMoods || [],
       monthlyNotes: normalized.monthlyNotes || {},
-      representativeEmotionTags: normalized.representativeEmotionTags
+      representativeEmotionTags: normalized.representativeEmotionTags,
+      notificationSettings: normalized.settings
     },
     updated_at: new Date().toISOString()
   });
@@ -264,11 +270,23 @@ export async function pullAppState(userId: string, local: AppState): Promise<App
 
   const preferences = (settingsResult.data as AppSettingsRow | null)?.preferences || {};
 
+  const legacySettings = notificationResult.data ? rowToSettings(notificationResult.data as NotificationSettingsRow) : local.settings;
+  const preferenceSettings = preferences.notificationSettings;
+  const syncedSettings: NotificationSettings = preferenceSettings
+    ? {
+      ...legacySettings,
+      ...preferenceSettings,
+      scheduleMode: ["interval", "fixed", "random"].includes(preferenceSettings.scheduleMode)
+        ? preferenceSettings.scheduleMode
+        : legacySettings.scheduleMode
+    }
+    : legacySettings;
+
   return {
     ...local,
     entries: ((entriesResult.data || []) as EntryRow[]).map(rowToEntry),
     letters: ((lettersResult.data || []) as LetterRow[]).map(rowToLetter),
-    settings: notificationResult.data ? rowToSettings(notificationResult.data as NotificationSettingsRow) : local.settings,
+    settings: syncedSettings,
     theme: normalizeColorTheme(preferences.theme || local.theme),
     energyColorMode: preferences.energyColorMode || local.energyColorMode,
     calendarEnergyMode: preferences.calendarEnergyMode || local.calendarEnergyMode,

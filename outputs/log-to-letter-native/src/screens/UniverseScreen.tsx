@@ -14,6 +14,7 @@ type Props = {
   loginLoading?: boolean;
   onLogin: () => void;
   monthFocusRequest?: { monthKey: string; requestId: number } | null;
+  onOpenDetail?: () => void;
 };
 
 type MoodBiome = "calm" | "grateful" | "proud" | "excited" | "anxious" | "other";
@@ -1076,7 +1077,7 @@ function buildScenarioEntries(scenarioIndex: number, monthKey: string): Entry[] 
   return entries;
 }
 
-export function UniverseScreen({ entries, guestEntryCount = 0, isLoggedIn, loginLoading, onLogin, monthFocusRequest }: Props) {
+export function UniverseScreen({ entries, guestEntryCount = 0, isLoggedIn, loginLoading, onLogin, monthFocusRequest, onOpenDetail }: Props) {
   const [rotationIndex, setRotationIndex] = useState(0);
   const [selectedCategoryKey, setSelectedCategoryKey] = useState<V4Category | null>(null);
   const [selectedMonthKey, setSelectedMonthKey] = useState(() => latestMonthKey(entries));
@@ -1407,7 +1408,10 @@ export function UniverseScreen({ entries, guestEntryCount = 0, isLoggedIn, login
               <Pressable
                 key={category.key}
                 style={styles.categoryButton}
-                onPress={() => setSelectedCategoryKey(category.key)}
+                onPress={() => {
+                  onOpenDetail?.();
+                  setSelectedCategoryKey(category.key);
+                }}
               >
                 <Text style={styles.categoryButtonLabel}>{category.label}</Text>
                 <Text style={styles.categoryButtonCount}>{category.count}</Text>

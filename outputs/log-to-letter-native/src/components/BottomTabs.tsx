@@ -8,6 +8,8 @@ type Props = {
   active: TabKey;
   onChange: (tab: TabKey) => void;
   cosmic?: boolean;
+  highlighted?: TabKey | null;
+  locked?: boolean;
 };
 
 const tabs: Array<{ key: TabKey; label: string; icon: string }> = [
@@ -18,7 +20,7 @@ const tabs: Array<{ key: TabKey; label: string; icon: string }> = [
   { key: "settings", label: "알림", icon: "🔔" }
 ];
 
-export function BottomTabs({ active, onChange, cosmic }: Props) {
+export function BottomTabs({ active, onChange, cosmic, highlighted = null, locked = false }: Props) {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const wrapStyle = cosmic
@@ -30,8 +32,14 @@ export function BottomTabs({ active, onChange, cosmic }: Props) {
       {tabs.map((tab) => (
         <Pressable
           key={tab.key}
+          disabled={locked}
           onPress={() => onChange(tab.key)}
-          style={[styles.item, active === tab.key && { backgroundColor: cosmic ? "rgba(255,255,255,0.16)" : theme.soft }]}
+          style={[
+            styles.item,
+            active === tab.key && { backgroundColor: cosmic ? "rgba(255,255,255,0.16)" : theme.soft },
+            highlighted !== null && highlighted !== tab.key && styles.dimmedItem,
+            highlighted === tab.key && styles.highlightedItem
+          ]}
         >
           <Text style={styles.icon}>{tab.icon}</Text>
           <Text
@@ -65,6 +73,14 @@ const styles = StyleSheet.create({
     gap: 3,
     paddingVertical: 8,
     borderRadius: 8
+  },
+  highlightedItem: {
+    borderWidth: 2,
+    borderColor: "#9fcfff",
+    backgroundColor: "rgba(159, 207, 255, 0.24)"
+  },
+  dimmedItem: {
+    opacity: 0.32
   },
   icon: {
     fontSize: 17

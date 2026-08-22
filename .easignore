@@ -20,6 +20,8 @@ outputs/log-to-letter-native/.expo/
 outputs/log-to-letter-native/dist/
 outputs/log-to-letter-native/tmp/
 outputs/log-to-letter-native/android/
+outputs/log-to-letter-native/ios/
+outputs/log-to-letter-native/store-assets/
 outputs/log-to-letter-native/*.log
 outputs/log-to-letter-native/.env
 outputs/log-to-letter-native/.env.local

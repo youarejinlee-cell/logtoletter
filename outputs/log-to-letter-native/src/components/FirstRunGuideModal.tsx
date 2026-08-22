@@ -1,173 +1,126 @@
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Image, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+
+const logo = require("../../assets/assets_v4/app-logo/logo_v2.png");
+const saturn = require("../../assets/assets_v4/deco/deco_saturn.png");
 
 type Props = {
   visible: boolean;
+  onStart: () => void;
   onClose: () => void;
 };
 
-const guideSteps = [
-  {
-    number: "01",
-    title: "지금의 기록 남기기",
-    body: "떠오른 생각을 적고 감정, 에너지, 카테고리를 골라 기록해."
-  },
-  {
-    number: "02",
-    title: "한 달의 흐름 돌아보기",
-    body: "모아보기와 분석 보기에서 기록의 개수와 감정, 에너지 흐름을 확인해."
-  },
-  {
-    number: "03",
-    title: "나만의 기록 행성 만들기",
-    body: "로그인한 뒤 기록이 쌓이면 카테고리별 대륙과 장식이 한 달의 행성을 완성해."
-  },
-  {
-    number: "04",
-    title: "기록 안전하게 보관하기",
-    body: "로그인 전 기록은 기기에만 저장돼. 로그인할 때 가져오기를 선택하면 계정에 연결할 수 있어."
-  }
-];
-
-export function FirstRunGuideModal({ visible, onClose }: Props) {
+export function FirstRunGuideModal({ visible, onStart, onClose }: Props) {
   return (
-    <Modal visible={visible} animationType="fade" onRequestClose={onClose}>
-      <SafeAreaView edges={["left", "right", "bottom"]} style={styles.safeArea}>
-        <View style={styles.header}>
-          <View style={styles.headerCopy}>
-            <Text style={styles.eyebrow}>LOG PLANET GUIDE</Text>
-            <Text style={styles.title}>기록이 행성이 되는 방법</Text>
-            <Text style={styles.description}>짧게 남긴 순간들이 모여 한 달의 행성을 만들어.</Text>
-          </View>
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      <View style={styles.backdrop}>
+        <View style={styles.card}>
+          <View style={styles.orbit} />
+          <Image source={saturn} style={styles.saturn} resizeMode="contain" />
           <Pressable style={styles.closeButton} onPress={onClose} accessibilityLabel="가이드 닫기">
-            <Text style={styles.closeButtonText}>×</Text>
+            <Text style={styles.closeText}>×</Text>
+          </Pressable>
+          <Image source={logo} style={styles.logo} resizeMode="contain" />
+          <Text style={styles.eyebrow}>LOG PLANET GUIDE</Text>
+          <Text style={styles.title}>기록이 행성이 되는 방법</Text>
+          <Text style={styles.description}>
+            다섯 개의 탭을 함께 둘러보며{`\n`}나만의 기록 행성을 시작해봐.
+          </Text>
+          <Pressable style={styles.startButton} onPress={onStart}>
+            <Text style={styles.startButtonText}>가이드 시작하기</Text>
           </Pressable>
         </View>
-
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-        >
-          {guideSteps.map((step) => (
-            <View key={step.number} style={styles.step}>
-              <Text style={styles.stepNumber}>{step.number}</Text>
-              <View style={styles.stepCopy}>
-                <Text style={styles.stepTitle}>{step.title}</Text>
-                <Text style={styles.stepBody}>{step.body}</Text>
-              </View>
-            </View>
-          ))}
-          <View style={styles.footer}>
-            <Pressable style={styles.startButton} onPress={onClose}>
-              <Text style={styles.startButtonText}>시작하기</Text>
-            </Pressable>
-          </View>
-        </ScrollView>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  backdrop: {
     flex: 1,
-    backgroundColor: "#070d2a"
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingTop: 64,
-    paddingBottom: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(191, 224, 255, 0.16)"
-  },
-  headerCopy: {
-    flex: 1,
-    gap: 6
-  },
-  eyebrow: {
-    color: "#9fcfff",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 0
-  },
-  title: {
-    color: "#fff",
-    fontSize: 25,
-    lineHeight: 32,
-    fontWeight: "900"
-  },
-  description: {
-    color: "rgba(216, 235, 255, 0.7)",
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: "700"
-  },
-  closeButton: {
     alignItems: "center",
     justifyContent: "center",
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: "rgba(255,255,255,0.09)"
+    paddingHorizontal: 24,
+    backgroundColor: "rgba(3, 7, 24, 0.78)"
   },
-  closeButtonText: {
-    color: "#eaf2ff",
+  card: {
+    width: "100%",
+    maxWidth: 350,
+    alignItems: "center",
+    overflow: "hidden",
+    paddingHorizontal: 22,
+    paddingTop: 34,
+    paddingBottom: 22,
+    borderWidth: 1,
+    borderColor: "rgba(191, 224, 255, 0.38)",
+    borderRadius: 8,
+    backgroundColor: "#0b1b4d"
+  },
+  orbit: {
+    position: "absolute",
+    top: -78,
+    right: -50,
+    width: 190,
+    height: 190,
+    borderWidth: 1,
+    borderColor: "rgba(159, 207, 255, 0.18)",
+    borderRadius: 95
+  },
+  saturn: {
+    position: "absolute",
+    top: 18,
+    right: 18,
+    width: 48,
+    height: 48,
+    opacity: 0.82
+  },
+  closeButton: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    width: 38,
+    height: 38
+  },
+  closeText: {
+    color: "rgba(216, 235, 255, 0.78)",
     fontSize: 25,
     lineHeight: 27,
-    fontWeight: "500"
-  },
-  scroll: {
-    flex: 1
-  },
-  content: {
-    gap: 10,
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 20
-  },
-  step: {
-    minHeight: 112,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "rgba(191, 224, 255, 0.18)",
-    borderRadius: 8,
-    backgroundColor: "rgba(17, 31, 76, 0.88)"
-  },
-  stepNumber: {
-    width: 30,
-    color: "#9fcfff",
-    fontSize: 13,
-    fontWeight: "900"
-  },
-  stepCopy: {
-    flex: 1,
-    gap: 6
-  },
-  stepTitle: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "900"
-  },
-  stepBody: {
-    color: "rgba(216, 235, 255, 0.72)",
-    fontSize: 13,
-    lineHeight: 20,
     fontWeight: "700"
   },
-  footer: {
-    marginTop: 10
+  logo: {
+    width: 78,
+    height: 78,
+    borderRadius: 8
+  },
+  eyebrow: {
+    marginTop: 18,
+    color: "#9fcfff",
+    fontSize: 11,
+    fontWeight: "900"
+  },
+  title: {
+    marginTop: 7,
+    color: "#fff",
+    fontSize: 24,
+    lineHeight: 31,
+    fontWeight: "900",
+    textAlign: "center"
+  },
+  description: {
+    marginTop: 10,
+    color: "rgba(216, 235, 255, 0.78)",
+    fontSize: 14,
+    lineHeight: 21,
+    fontWeight: "700",
+    textAlign: "center"
   },
   startButton: {
+    width: "100%",
     minHeight: 50,
     alignItems: "center",
     justifyContent: "center",
+    marginTop: 24,
     borderRadius: 8,
     backgroundColor: "#c9e6ff"
   },

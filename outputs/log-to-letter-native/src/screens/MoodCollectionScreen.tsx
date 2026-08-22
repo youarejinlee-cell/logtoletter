@@ -4,7 +4,7 @@ import { CloverBadge } from "../components/CloverBadge";
 import { Screen } from "../components/Screen";
 import { categoryForEntry, entryCategoryLabels } from "../lib/entryCategories";
 import { getEnergyLevel, normalizeEnergyPercent } from "../lib/energyColors";
-import { emotionGroupLabels, emotionGroups, emotionTagIdForEntry, emotionTagLabel, emotionTags } from "../lib/emotionTags";
+import { emotionGroupLabels, emotionGroups, emotionTagDisplayLabel, emotionTagIdForEntry, emotionTags } from "../lib/emotionTags";
 import { useAppTheme } from "../lib/theme";
 import { EnergyColorMode, Entry, Mood } from "../types/domain";
 import { EmotionTagId } from "../types/emotions";
@@ -17,48 +17,6 @@ type Props = {
 
 type RangeMode = "week" | "month" | "quarter" | "custom";
 type SortDirection = "desc" | "asc";
-
-const moodOptions: Array<{ key: Mood; label: string; group: "긍정" | "중간" | "부정" }> = [
-  { key: "calm", label: "😌 차분함", group: "긍정" },
-  { key: "joy", label: "😊 좋음", group: "긍정" },
-  { key: "moved", label: "🥹 뭉클함", group: "긍정" },
-  { key: "recovered", label: "🌱 회복됨", group: "긍정" },
-  { key: "happy", label: "😄 행복함", group: "긍정" },
-  { key: "delight", label: "😁 기쁨", group: "긍정" },
-  { key: "excited", label: "💓 설렘", group: "긍정" },
-  { key: "fun", label: "😆 재밌음", group: "긍정" },
-  { key: "hopeful", label: "🌤️ 희망적임", group: "긍정" },
-  { key: "grateful", label: "🙏 고마움", group: "긍정" },
-  { key: "proud", label: "✨ 뿌듯함", group: "긍정" },
-  { key: "peaceful", label: "🕊️ 평화로움", group: "긍정" },
-  { key: "lucky", label: "🍀 행운", group: "긍정" },
-  { key: "selfEsteem", label: "💪 자존감상승", group: "긍정" },
-  { key: "complex", label: "🤔 복잡함", group: "중간" },
-  { key: "indifferent", label: "😶 무덤덤함", group: "중간" },
-  { key: "curious", label: "🧐 궁금함", group: "중간" },
-  { key: "accepting", label: "🤲 받아들임", group: "중간" },
-  { key: "reflective", label: "🪞 반성함", group: "중간" },
-  { key: "envious", label: "🫧 부러움", group: "중간" },
-  { key: "instructive", label: "📌 교훈적임", group: "중간" },
-  { key: "difficult", label: "🧩 어려움", group: "중간" },
-  { key: "blank", label: "🫠 멍함", group: "중간" },
-  { key: "anxious", label: "😟 불안함", group: "부정" },
-  { key: "worried", label: "😥 걱정됨", group: "부정" },
-  { key: "tired", label: "😮‍💨 피곤함", group: "부정" },
-  { key: "sad", label: "😔 가라앉음", group: "부정" },
-  { key: "depressed", label: "🌧️ 우울함", group: "부정" },
-  { key: "angry", label: "😤 날카로움", group: "부정" },
-  { key: "irritated", label: "😒 짜증남", group: "부정" },
-  { key: "jealous", label: "🫣 질투", group: "부정" },
-  { key: "prideHurt", label: "😣 자존심상함", group: "부정" },
-  { key: "sensitive", label: "🫨 예민함", group: "부정" },
-  { key: "regret", label: "😞 후회됨", group: "부정" }
-];
-
-const moodLabelMap = moodOptions.reduce<Record<Mood, string>>((acc, mood) => {
-  acc[mood.key] = mood.label;
-  return acc;
-}, {} as Record<Mood, string>);
 
 function dateKey(value: string | Date) {
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
@@ -230,7 +188,7 @@ export function MoodCollectionContent({ entries, energyColorMode }: Props) {
   };
 
   const selectedLabel = selectedMoods.length
-    ? selectedMoods.map(emotionTagLabel).join(", ")
+    ? selectedMoods.map(emotionTagDisplayLabel).join(", ")
     : "전체 감정";
 
   return (
@@ -348,7 +306,7 @@ export function MoodCollectionContent({ entries, energyColorMode }: Props) {
                                   { color: theme.muted },
                                   active && { color: theme.tint },
                                   disabled && styles.moodTextDisabled
-                                ]}>{mood.label} {count}</Text>
+                                ]}>{emotionTagDisplayLabel(mood.id)} {count}</Text>
                               </Pressable>
                             );
                           })}
@@ -408,7 +366,7 @@ export function MoodCollectionContent({ entries, energyColorMode }: Props) {
                     shadowOpacity={0.14}
                     glowColor="rgba(85, 85, 85, 0.08)"
                   />
-                  <Text style={[styles.cardMood, { color: theme.text }]}>{emotionTagLabel(emotionTagIdForEntry(entry))}</Text>
+                  <Text style={[styles.cardMood, { color: theme.text }]}>{emotionTagDisplayLabel(emotionTagIdForEntry(entry))}</Text>
                 </View>
                 <Text style={[styles.cardTime, { color: theme.muted }]}>{formatDateLabel(entry.createdAt)} · {formatTimeLabel(entry.createdAt)}</Text>
               </View>

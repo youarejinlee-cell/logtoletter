@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Screen } from "../components/Screen";
-import { emotionGroupLabels, emotionGroups, getEmotionTag, tagsForEmotionGroup } from "../lib/emotionTags";
+import { emotionGroupLabels, emotionGroups, emotionTagDisplayLabel, getEmotionTag, tagsForEmotionGroup } from "../lib/emotionTags";
 import { useAppTheme } from "../lib/theme";
 import { LetterPaperStyle } from "../types/domain";
 import { EmotionGroup, EmotionTagId, RepresentativeEmotionTags } from "../types/emotions";
@@ -48,13 +48,13 @@ export function AppSettingsScreen({
       if (selected.includes(id)) {
         return { ...current, [group]: selected.filter((item) => item !== id) };
       }
-      if (selected.length >= 4) return current;
+      if (selected.length >= 3) return current;
       return { ...current, [group]: [...selected, id] };
     });
   };
 
   const saveRepresentativeTags = async () => {
-    if (emotionGroups.some((group) => representativeDraft[group].length !== 4)) {
+    if (emotionGroups.some((group) => representativeDraft[group].length !== 3)) {
       setRepresentativeSaveState("error");
       return;
     }
@@ -70,7 +70,7 @@ export function AppSettingsScreen({
     <Screen eyebrow="Settings" title="설정">
       <View style={[styles.panel, { borderColor: currentTheme.border, backgroundColor: currentTheme.card }]}>
         <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>대표 감정 태그</Text>
-        <Text style={[styles.description, { color: currentTheme.muted }]}>기록 탭에 먼저 보일 감정을 각 영역에서 4개씩 골라줘. 저장하기 전까지는 기록 탭에 반영되지 않아.</Text>
+        <Text style={[styles.description, { color: currentTheme.muted }]}>기록 탭에 먼저 보일 감정을 각 영역에서 3개씩 골라줘. 저장하기 전까지는 기록 탭에 반영되지 않아.</Text>
         <View style={styles.representativeGroups}>
           {emotionGroups.map((group) => {
             const selectedIds = representativeDraft[group];
@@ -83,7 +83,7 @@ export function AppSettingsScreen({
                 <View style={styles.representativeHeader}>
                   <View style={styles.representativeHeading}>
                     <Text style={[styles.representativeTitle, { color: currentTheme.text }]}>{emotionGroupLabels[group]}</Text>
-                    <Text style={[styles.representativeCount, { color: currentTheme.muted }]}>{selectedIds.length} / 4</Text>
+                    <Text style={[styles.representativeCount, { color: currentTheme.muted }]}>{selectedIds.length} / 3</Text>
                   </View>
                   <Pressable
                     accessibilityRole="button"
@@ -97,7 +97,7 @@ export function AppSettingsScreen({
                 <View style={styles.moodWrap}>
                   {visibleTags.map((tag) => {
                     const active = selectedIds.includes(tag.id);
-                    const disabled = !active && selectedIds.length >= 4;
+                    const disabled = !active && selectedIds.length >= 3;
                     return (
                       <Pressable
                         key={tag.id}
@@ -112,7 +112,7 @@ export function AppSettingsScreen({
                         ]}
                         onPress={() => toggleRepresentativeTag(group, tag.id)}
                       >
-                        <Text maxFontSizeMultiplier={1.2} style={[styles.moodText, { color: currentTheme.text }, active && { color: currentTheme.tint }]}>{tag.label}</Text>
+                        <Text maxFontSizeMultiplier={1.2} style={[styles.moodText, { color: currentTheme.text }, active && { color: currentTheme.tint }]}>{emotionTagDisplayLabel(tag.id)}</Text>
                       </Pressable>
                     );
                   })}
@@ -121,7 +121,7 @@ export function AppSettingsScreen({
             );
           })}
         </View>
-        {representativeSaveState === "error" ? <Text style={styles.saveError}>각 영역에서 대표 감정을 4개씩 선택해줘.</Text> : null}
+        {representativeSaveState === "error" ? <Text style={styles.saveError}>각 영역에서 대표 감정을 3개씩 선택해줘.</Text> : null}
         {representativeSaveState === "saved" ? <Text style={[styles.saveStatus, { color: currentTheme.tint }]}>기록 탭에 대표 감정을 반영했어.</Text> : null}
         <Pressable
           disabled={representativeSaveState === "saving"}

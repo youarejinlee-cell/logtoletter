@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { Keyboard, PanResponder, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { CloverBadge } from "../components/CloverBadge";
 import { Screen } from "../components/Screen";
-import { EmotionTag, orderedEmotionTags } from "../lib/emotionTags";
+import { EmotionTag, emotionTagDisplayLabel, orderedEmotionTags } from "../lib/emotionTags";
 import { entryCategoryOptions, suggestEntryCategory } from "../lib/entryCategories";
 import { getEnergyPalette } from "../lib/energyColors";
 import { entryTextLength, MAX_ENTRY_TEXT_LENGTH } from "../lib/entryText";
@@ -65,6 +65,7 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
   const [positiveExpanded, setPositiveExpanded] = useState(false);
   const [neutralExpanded, setNeutralExpanded] = useState(false);
   const [negativeExpanded, setNegativeExpanded] = useState(false);
+  const [hintsExpanded, setHintsExpanded] = useState(false);
   const energyValue = energy;
   const canSubmit = Boolean(hasText && mood);
   const energyLevel = energyLevels.find((level) => level.value === energyValue) || energyLevels[0];
@@ -146,22 +147,34 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
         </Text>
       </View>
 
-      <View style={styles.hints}>
-        {hints.map(([label, prompt]) => (
+      <View style={[styles.hints, !hintsExpanded && styles.hintsCollapsed]}>
+        {(hintsExpanded ? hints : hints.slice(0, 3)).map(([label, prompt]) => (
           <Pressable
             key={label}
-            style={[styles.hint, { backgroundColor: theme.soft }]}
+            style={[styles.hint, !hintsExpanded && styles.hintCollapsed, { backgroundColor: theme.soft }]}
             onPress={() => {
               const current = textDraft.current;
               replaceInputText(`${current}${current ? "\n" : ""}${prompt}`);
             }}
           >
-            <Text style={[styles.hintText, { color: theme.tint }]}>{label}</Text>
+            <Text
+              numberOfLines={1}
+              style={[styles.hintText, !hintsExpanded && styles.hintTextCollapsed, { color: theme.tint }]}
+            >
+              {label}
+            </Text>
           </Pressable>
         ))}
+        <Pressable
+          style={[styles.expandButton, styles.hintExpandButton, { backgroundColor: theme.soft }]}
+          onPress={() => setHintsExpanded((current) => !current)}
+          accessibilityLabel={hintsExpanded ? "기록 힌트 접기" : "기록 힌트 펼치기"}
+        >
+          <Text style={[styles.expandText, { color: theme.tint }]}>{hintsExpanded ? "−" : "+"}</Text>
+        </Pressable>
       </View>
 
-      <Text style={[styles.sectionTitle, { color: theme.text }]}>기록 카테고리</Text>
+      <Text style={[styles.sectionTitle, styles.sectionStart, { color: theme.text }]}>기록 카테고리</Text>
       <View style={[styles.categoryPanel, { borderColor: theme.border, backgroundColor: theme.card }]}>
         <Text style={[styles.categoryHint, { color: theme.muted }]}>기록을 보고 먼저 골라둘게. 필요하면 바꿔줘.</Text>
         <View style={styles.chips}>
@@ -185,7 +198,7 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
         </View>
       </View>
 
-      <Text style={[styles.sectionTitle, { color: theme.text }]}>사용한 에너지(%)</Text>
+      <Text style={[styles.sectionTitle, styles.sectionStart, { color: theme.text }]}>사용한 에너지(%)</Text>
       <View style={[styles.energyPanel, { borderColor: theme.border, backgroundColor: theme.card }]}>
         <View style={styles.energyHeader}>
           <Text style={[styles.energyPercent, { color: theme.text }]}>{energy}%</Text>
@@ -250,10 +263,10 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
         </View>
       </View>
 
-      <Text style={[styles.sectionTitle, { color: theme.text }]}>감정</Text>
+      <Text style={[styles.sectionTitle, styles.sectionStart, { color: theme.text }]}>감정</Text>
       <MoodGroup
         title="긍정 감정"
-        moods={positiveExpanded ? positiveMoods : positiveMoods.slice(0, 4)}
+        moods={positiveExpanded ? positiveMoods : positiveMoods.slice(0, 3)}
         representativeIds={representativeEmotionTags.positive}
         expanded={positiveExpanded}
         onToggle={() => setPositiveExpanded((current) => !current)}
@@ -273,7 +286,7 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
       />
       <MoodGroup
         title="중간 감정"
-        moods={neutralExpanded ? neutralMoods : neutralMoods.slice(0, 4)}
+        moods={neutralExpanded ? neutralMoods : neutralMoods.slice(0, 3)}
         representativeIds={representativeEmotionTags.neutral}
         expanded={neutralExpanded}
         onToggle={() => setNeutralExpanded((current) => !current)}
@@ -293,7 +306,7 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
       />
       <MoodGroup
         title="부정 감정"
-        moods={negativeExpanded ? negativeMoods : negativeMoods.slice(0, 4)}
+        moods={negativeExpanded ? negativeMoods : negativeMoods.slice(0, 3)}
         representativeIds={representativeEmotionTags.negative}
         expanded={negativeExpanded}
         onToggle={() => setNegativeExpanded((current) => !current)}
@@ -411,7 +424,7 @@ function MoodGroup({
                 selected === item.id && { color: themeTint }
               ]}
             >
-              {item.label}
+              {emotionTagDisplayLabel(item.id)}
             </Text>
           </Pressable>
         ))}
@@ -443,7 +456,11 @@ const styles = StyleSheet.create({
   hints: {
     flexDirection: "row",
     flexWrap: "wrap",
+    alignItems: "center",
     gap: 8
+  },
+  hintsCollapsed: {
+    flexWrap: "nowrap"
   },
   hint: {
     paddingHorizontal: 12,
@@ -451,14 +468,30 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#e7f6df"
   },
+  hintCollapsed: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 6
+  },
   hintText: {
     color: "#2f8f54",
+    fontSize: 12,
+    lineHeight: 18,
     fontWeight: "800"
+  },
+  hintTextCollapsed: {
+    textAlign: "center"
+  },
+  hintExpandButton: {
+    flexShrink: 0
   },
   sectionTitle: {
     color: "#18241b",
     fontSize: 16,
     fontWeight: "900"
+  },
+  sectionStart: {
+    marginTop: 8
   },
   moodGroup: {
     gap: 9,

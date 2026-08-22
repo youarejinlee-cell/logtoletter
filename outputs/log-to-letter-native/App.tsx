@@ -10,6 +10,8 @@ import { GoogleLoginButton, KakaoLoginButton } from "./src/components/KakaoLogin
 import { AuthCard } from "./src/components/AuthCard";
 import { BottomTabs, TabKey } from "./src/components/BottomTabs";
 import { FirstRunGuideModal } from "./src/components/FirstRunGuideModal";
+import { GuideCoachmark, interactiveGuideSteps } from "./src/components/GuideCoachmark";
+import { GuestLoginPromptModal } from "./src/components/GuestLoginPromptModal";
 import { AccountScreen } from "./src/screens/AccountScreen";
 import { AppSettingsScreen } from "./src/screens/AppSettingsScreen";
 import { CalendarScreen } from "./src/screens/CalendarScreen";
@@ -53,6 +55,7 @@ const topSafePadding = Platform.select({
 });
 
 const LETTER_ARCHIVE_ENABLED = false;
+const GUEST_LOGIN_PROMPT_DELAY_MS = 20_000;
 const launchBackground = require("./assets/assets_v4/continent/background.png");
 
 const tabHeaderMeta: Record<TabKey, { eyebrow: string; title: string; lead: string }> = {
@@ -479,6 +482,7 @@ export default function App() {
   const [authChoiceVisible, setAuthChoiceVisible] = useState(false);
   const [guestBrowsePromptVisible, setGuestBrowsePromptVisible] = useState(false);
   const [firstRunGuideVisible, setFirstRunGuideVisible] = useState(false);
+  const [guideStep, setGuideStep] = useState<number | null>(null);
   const [firstRunGuideResolved, setFirstRunGuideResolved] = useState(false);
   const [launchScreenVisible, setLaunchScreenVisible] = useState(true);
   const [guestBrowseTimerReady, setGuestBrowseTimerReady] = useState(false);
@@ -637,19 +641,46 @@ export default function App() {
       setGuestBrowsePromptVisible(false);
       return;
     }
-    if (!hydrated || storageUserId !== null || !guestBrowseTimerReady || guestBrowsePromptShownRef.current) return;
+    if (
+      !hydrated
+      || storageUserId !== null
+      || !guestBrowseTimerReady
+      || guestBrowsePromptShownRef.current
+      || authChoiceVisible
+      || authLoading
+    ) return;
 
     const timer = setTimeout(() => {
       guestBrowsePromptShownRef.current = true;
       setGuestBrowsePromptVisible(true);
-    }, 7000);
+    }, GUEST_LOGIN_PROMPT_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [guestBrowseTimerReady, hydrated, storageUserId, user]);
+  }, [authChoiceVisible, authLoading, guestBrowseTimerReady, hydrated, storageUserId, user]);
 
-  const dismissFirstRunGuide = () => {
+  const finishFirstRunGuide = () => {
     setFirstRunGuideVisible(false);
+    setGuideStep(null);
     setGuestBrowseTimerReady(true);
     void completeFirstRunGuide();
+  };
+
+  const startFirstRunGuide = () => {
+    setFirstRunGuideVisible(false);
+    setGuideStep(0);
+    setTab(interactiveGuideSteps[0].tab);
+    setMenuOpen(false);
+  };
+
+  const advanceFirstRunGuide = () => {
+    if (guideStep === null) return;
+    const nextStep = guideStep + 1;
+    if (nextStep >= interactiveGuideSteps.length) {
+      finishFirstRunGuide();
+      setTab("universe");
+      return;
+    }
+    setGuideStep(nextStep);
+    setTab(interactiveGuideSteps[nextStep].tab);
   };
 
   const runFullSync = async (targetUser = user, targetState = state) => {
@@ -984,6 +1015,8 @@ export default function App() {
       const result = await scheduleLogNotifications(settings);
       const countLabel = settings.scheduleMode === "fixed"
         ? `일주일 ${result.count}번의 기록을 할 수 있어`
+        : settings.scheduleMode === "random"
+          ? `선택한 요일마다 하루 ${settings.randomDailyCount}번의 기록을 할 수 있어`
         : `하루 ${result.count}번의 기록을 할 수 있어`;
       setNotificationStatus(result.count ? countLabel : result.status);
       return result;
@@ -1037,6 +1070,7 @@ export default function App() {
         loginLoading={authLoading}
         onLogin={() => setAuthChoiceVisible(true)}
         monthFocusRequest={hydrated ? universeMonthFocusRequest : null}
+        onOpenDetail={() => setMenuOpen(false)}
       />
     ),
     capture: <CaptureScreen onAddEntry={addEntry} getNow={() => nowForState(state)} energyColorMode={state.energyColorMode} representativeEmotionTags={state.representativeEmotionTags} />,
@@ -1170,12 +1204,13 @@ export default function App() {
           ]}
         >
           <View style={styles.pageHeading}>
-            <Text style={styles.pageEyebrow}>{activeHeader.eyebrow}</Text>
-            <Text style={[styles.pageTitle, { color: theme.text }]}>{activeHeader.title}</Text>
-            <Text style={[styles.pageLead, { color: theme.muted }]}>{activeHeader.lead}</Text>
+            <Text allowFontScaling={false} numberOfLines={1} style={styles.pageEyebrow}>{activeHeader.eyebrow}</Text>
+            <Text allowFontScaling={false} numberOfLines={1} style={[styles.pageTitle, { color: theme.text }]}>{activeHeader.title}</Text>
+            <Text allowFontScaling={false} numberOfLines={2} style={[styles.pageLead, { color: theme.muted }]}>{activeHeader.lead}</Text>
           </View>
           <Pressable
-            style={[styles.menuButton, { backgroundColor: theme.soft }]}
+            disabled={guideStep !== null}
+            style={[styles.menuButton, { backgroundColor: theme.soft }, guideStep !== null && styles.menuButtonDisabled]}
             onPress={() => setMenuOpen((current) => !current)}
           >
             <Text style={[styles.menuButtonText, { color: theme.text }]}>{menuOpen ? "×" : "☰"}</Text>
@@ -1222,8 +1257,9 @@ export default function App() {
               <Pressable
                 style={[styles.menuListItem, { borderTopColor: theme.border, backgroundColor: theme.card }]}
                 onPress={() => {
-                  setTab("guide");
                   setMenuOpen(false);
+                  setGuideStep(null);
+                  setFirstRunGuideVisible(true);
                 }}
               >
                 <Text style={styles.menuListIcon}>📗</Text>
@@ -1245,36 +1281,30 @@ export default function App() {
           </>
         ) : null}
         <View style={styles.body}>{content}</View>
-        <BottomTabs active={activeTab} onChange={setTab} cosmic />
-        <FirstRunGuideModal visible={firstRunGuideVisible} onClose={dismissFirstRunGuide} />
-        <Modal
-          transparent
-          animationType="fade"
+        <BottomTabs
+          active={activeTab}
+          onChange={setTab}
+          cosmic
+          highlighted={guideStep === null ? null : interactiveGuideSteps[guideStep]?.tab}
+          locked={guideStep !== null}
+        />
+        {guideStep !== null ? (
+          <GuideCoachmark stepIndex={guideStep} onNext={advanceFirstRunGuide} onClose={finishFirstRunGuide} />
+        ) : null}
+        <FirstRunGuideModal
+          visible={firstRunGuideVisible}
+          onStart={startFirstRunGuide}
+          onClose={finishFirstRunGuide}
+        />
+        <GuestLoginPromptModal
           visible={guestBrowsePromptVisible}
-          onRequestClose={() => setGuestBrowsePromptVisible(false)}
-        >
-          <View style={styles.guestBrowseModalBackdrop}>
-            <View style={styles.guestBrowseModal}>
-              <Text style={styles.guestBrowseModalTitle}>나만의 기록 행성을 만들어봐</Text>
-              <Pressable
-                disabled={authLoading}
-                style={[styles.guestBrowsePrimaryButton, authLoading && styles.guestBrowseButtonDisabled]}
-                onPress={() => {
-                  setGuestBrowsePromptVisible(false);
-                  setAuthChoiceVisible(true);
-                }}
-              >
-                <Text style={styles.guestBrowsePrimaryText}>{authLoading ? "로그인 중" : "로그인 하러 가기"}</Text>
-              </Pressable>
-              <Pressable
-                style={styles.guestBrowseSecondaryButton}
-                onPress={() => setGuestBrowsePromptVisible(false)}
-              >
-                <Text style={styles.guestBrowseSecondaryText}>로그인 없이 둘러보기</Text>
-              </Pressable>
-            </View>
-          </View>
-        </Modal>
+          loading={authLoading}
+          onLogin={() => {
+            setGuestBrowsePromptVisible(false);
+            setAuthChoiceVisible(true);
+          }}
+          onDismiss={() => setGuestBrowsePromptVisible(false)}
+        />
         <Modal
           transparent
           animationType="fade"
@@ -1348,61 +1378,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#070d2a"
   },
-  guestBrowseModalBackdrop: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-    backgroundColor: "rgba(3, 7, 24, 0.72)"
-  },
-  guestBrowseModal: {
-    width: "100%",
-    maxWidth: 340,
-    gap: 10,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "rgba(191, 224, 255, 0.34)",
-    borderRadius: 8,
-    backgroundColor: "#0b1b4d"
-  },
-  guestBrowseModalTitle: {
-    marginBottom: 6,
-    color: "#fff",
-    fontSize: 20,
-    lineHeight: 28,
-    fontWeight: "900",
-    textAlign: "center"
-  },
-  guestBrowsePrimaryButton: {
-    minHeight: 48,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: "#c9e6ff"
-  },
-  guestBrowsePrimaryText: {
-    color: "#0b1b4d",
-    fontSize: 14,
-    fontWeight: "900"
-  },
-  guestBrowseSecondaryButton: {
-    minHeight: 46,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: "rgba(191, 224, 255, 0.3)",
-    borderRadius: 8
-  },
-  guestBrowseSecondaryText: {
-    color: "#d8ebff",
-    fontSize: 14,
-    fontWeight: "900"
-  },
-  guestBrowseButtonDisabled: {
-    opacity: 0.5
-  },
   authChoiceBackdrop: {
     flex: 1,
     alignItems: "center",
@@ -1455,6 +1430,8 @@ const styles = StyleSheet.create({
     fontWeight: "800"
   },
   header: {
+    zIndex: 40,
+    elevation: 40,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1473,16 +1450,19 @@ const styles = StyleSheet.create({
   pageEyebrow: {
     color: "#9fcfff",
     fontSize: 11,
+    lineHeight: 15,
     fontWeight: "900",
     letterSpacing: 0
   },
   pageTitle: {
     fontSize: 22,
+    lineHeight: 28,
     fontWeight: "900"
   },
   pageLead: {
+    minHeight: 36,
     fontSize: 12,
-    lineHeight: 17,
+    lineHeight: 18,
     fontWeight: "700"
   },
   menuButton: {
@@ -1496,20 +1476,24 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "900"
   },
+  menuButtonDisabled: {
+    opacity: 0.35
+  },
   menuBackdrop: {
     position: "absolute",
     top: 0,
     right: 0,
     bottom: 0,
     left: 0,
-    zIndex: 10,
+    zIndex: 80,
+    elevation: 80,
     backgroundColor: "rgba(3, 7, 24, 0.42)"
   },
   floatingMenu: {
     position: "absolute",
     top: topSafePadding + 80,
     right: 14,
-    zIndex: 20,
+    zIndex: 90,
     width: 292,
     borderWidth: 1,
     borderRadius: 8,
@@ -1519,7 +1503,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
-    elevation: 6
+    elevation: 90
   },
   floatingMenuHeader: {
     minHeight: 46,
@@ -1570,6 +1554,7 @@ const styles = StyleSheet.create({
     fontWeight: "900"
   },
   body: {
-    flex: 1
+    flex: 1,
+    zIndex: 1
   }
 });

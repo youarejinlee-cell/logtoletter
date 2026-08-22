@@ -153,48 +153,33 @@ export function SettingsScreen({ settings, onChange, onSave }: Props) {
         {draftSettings.enabled && editing ? (
           <>
             <View style={[styles.modeSwitch, { backgroundColor: theme.soft }]}>
-              <Pressable
-                style={[styles.modeButton, draftSettings.scheduleMode !== "fixed" && { backgroundColor: theme.tint }]}
-                onPress={() => {
-                  Keyboard.dismiss();
-                  setDraftSettings({ ...draftSettings, scheduleMode: "interval" });
-                }}
-              >
-                <Text style={[styles.modeText, draftSettings.scheduleMode !== "fixed" && styles.modeTextActive]}>간격 반복</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.modeButton, draftSettings.scheduleMode === "fixed" && { backgroundColor: theme.tint }]}
-                onPress={() => {
-                  Keyboard.dismiss();
-                  setDraftSettings({ ...draftSettings, scheduleMode: "fixed" });
-                }}
-              >
-                <Text style={[styles.modeText, draftSettings.scheduleMode === "fixed" && styles.modeTextActive]}>특정 시간</Text>
-              </Pressable>
+              {([
+                ["interval", "간격 반복"],
+                ["fixed", "특정 시간"],
+                ["random", "랜덤 알림"]
+              ] as const).map(([mode, label]) => {
+                const selected = draftSettings.scheduleMode === mode;
+                return (
+                  <Pressable
+                    key={mode}
+                    style={[styles.modeButton, selected && { backgroundColor: theme.tint }]}
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      setDraftSettings((current) => ({ ...current, scheduleMode: mode }));
+                    }}
+                  >
+                    <Text style={[styles.modeText, selected && styles.modeTextActive]}>{label}</Text>
+                  </Pressable>
+                );
+              })}
             </View>
 
             {draftSettings.scheduleMode === "fixed" ? (
               <>
-                <Text style={styles.fieldLabel}>요일</Text>
-                <View style={styles.weekdayRow}>
-                  {weekdays.map((day) => {
-                    const selected = draftSettings.weekdays.includes(day.value);
-                    return (
-                      <Pressable
-                        key={day.value}
-                        style={[styles.weekdayChip, selected && { borderColor: theme.tint, backgroundColor: theme.soft }]}
-                        onPress={() => {
-                          const nextWeekdays = selected
-                            ? draftSettings.weekdays.filter((weekday) => weekday !== day.value)
-                            : [...draftSettings.weekdays, day.value].sort((a, b) => a - b);
-                          setDraftSettings({ ...draftSettings, weekdays: nextWeekdays.length ? nextWeekdays : [day.value] });
-                        }}
-                      >
-                        <Text style={[styles.weekdayText, selected && { color: theme.tint }]}>{day.label}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                <WeekdayPicker
+                  value={draftSettings.weekdays}
+                  onChange={(nextWeekdays) => setDraftSettings((current) => ({ ...current, weekdays: nextWeekdays }))}
+                />
                 <View style={styles.timeHeader}>
                   <Text style={styles.fieldLabel}>시간</Text>
                   <Pressable
@@ -230,11 +215,40 @@ export function SettingsScreen({ settings, onChange, onSave }: Props) {
                   </View>
                 ))}
               </>
+            ) : draftSettings.scheduleMode === "random" ? (
+              <>
+                <WeekdayPicker
+                  value={draftSettings.weekdays}
+                  onChange={(nextWeekdays) => setDraftSettings((current) => ({ ...current, weekdays: nextWeekdays }))}
+                />
+                <TimeWheel label="몇 시부터" value={draftSettings.randomStartTime} onChange={(randomStartTime) => setDraftSettings((current) => ({ ...current, randomStartTime }))} />
+                <TimeWheel label="몇 시까지" value={draftSettings.randomEndTime} onChange={(randomEndTime) => setDraftSettings((current) => ({ ...current, randomEndTime }))} />
+                <View style={styles.field}>
+                  <Text style={styles.fieldLabel}>하루 몇 번</Text>
+                  <View style={[styles.countStepper, { borderColor: theme.border }]}>
+                    <Pressable
+                      style={styles.stepperButton}
+                      disabled={draftSettings.randomDailyCount <= 1}
+                      onPress={() => setDraftSettings((current) => ({ ...current, randomDailyCount: Math.max(1, current.randomDailyCount - 1) }))}
+                    >
+                      <Text style={[styles.stepperSymbol, draftSettings.randomDailyCount <= 1 && styles.disabledText]}>−</Text>
+                    </Pressable>
+                    <Text style={[styles.stepperValue, { color: theme.tint }]}>{draftSettings.randomDailyCount}번</Text>
+                    <Pressable
+                      style={styles.stepperButton}
+                      disabled={draftSettings.randomDailyCount >= 12}
+                      onPress={() => setDraftSettings((current) => ({ ...current, randomDailyCount: Math.min(12, current.randomDailyCount + 1) }))}
+                    >
+                      <Text style={[styles.stepperSymbol, draftSettings.randomDailyCount >= 12 && styles.disabledText]}>+</Text>
+                    </Pressable>
+                  </View>
+                  <Text style={styles.fieldHelp}>알림 사이는 최소 1시간, 최대 3시간 간격으로 무작위 배치돼.</Text>
+                </View>
+              </>
             ) : (
               <>
-                <TimeWheel label="시작" value={draftSettings.startTime} onChange={(startTime) => setDraftSettings((current) => ({ ...current, startTime }))} />
-                <TimeWheel label="방해금지 시작" value={draftSettings.dndStart} onChange={(dndStart) => setDraftSettings((current) => ({ ...current, dndStart }))} />
-                <TimeWheel label="방해금지 종료" value={draftSettings.dndEnd} onChange={(dndEnd) => setDraftSettings((current) => ({ ...current, dndEnd }))} />
+                <TimeWheel label="몇 시부터" value={draftSettings.startTime} onChange={(startTime) => setDraftSettings((current) => ({ ...current, startTime }))} />
+                <TimeWheel label="몇 시까지" value={draftSettings.endTime} onChange={(endTime) => setDraftSettings((current) => ({ ...current, endTime }))} />
                 <IntervalWheel
                   value={draftSettings.intervalMinutes}
                   onChange={(intervalMinutes) => {
@@ -279,6 +293,34 @@ export function SettingsScreen({ settings, onChange, onSave }: Props) {
         ) : null}
       </View>
     </Screen>
+  );
+}
+
+function WeekdayPicker({ value, onChange }: { value: number[]; onChange: (value: number[]) => void }) {
+  const theme = useAppTheme();
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>요일</Text>
+      <View style={styles.weekdayRow}>
+        {weekdays.map((day) => {
+          const selected = value.includes(day.value);
+          return (
+            <Pressable
+              key={day.value}
+              style={[styles.weekdayChip, selected && { borderColor: theme.tint, backgroundColor: theme.soft }]}
+              onPress={() => {
+                const next = selected
+                  ? value.filter((weekday) => weekday !== day.value)
+                  : [...value, day.value].sort((a, b) => a - b);
+                onChange(next.length ? next : [day.value]);
+              }}
+            >
+              <Text style={[styles.weekdayText, selected && { color: theme.tint }]}>{day.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
   );
 }
 
@@ -397,7 +439,7 @@ function IntervalWheel({
   return (
     <View style={styles.field}>
       <View style={styles.fieldHeader}>
-        <Text style={styles.fieldLabel}>알림 간격(분)</Text>
+        <Text style={styles.fieldLabel}>몇 분 간격으로</Text>
       </View>
       <ScrollView
         ref={wheelRef}
@@ -432,6 +474,12 @@ export function normalizeNotificationSettings(settings: NotificationSettings): N
     .slice(0, 5);
   return {
     ...settings,
+    scheduleMode: ["interval", "fixed", "random"].includes(settings.scheduleMode) ? settings.scheduleMode : "interval",
+    startTime: normalizeTimeText(settings.startTime) || "09:00",
+    endTime: normalizeTimeText(settings.endTime) || normalizeTimeText(settings.dndStart) || "22:00",
+    randomStartTime: normalizeTimeText(settings.randomStartTime) || "09:00",
+    randomEndTime: normalizeTimeText(settings.randomEndTime) || "22:00",
+    randomDailyCount: Math.max(1, Math.min(12, Math.round(Number(settings.randomDailyCount) || 4))),
     intervalMinutes: normalizeIntervalMinutes(settings.intervalMinutes),
     weekdays: settings.weekdays?.length ? settings.weekdays.filter((day) => day >= 1 && day <= 7) : [1, 2, 3, 4, 5, 6, 7],
     fixedTimes: fixedTimes.length ? fixedTimes : ["10:00"]
@@ -464,15 +512,21 @@ function validateNotificationSettings(settings: NotificationSettings) {
     return null;
   }
 
-  if (!normalizeTimeText(settings.startTime)) return "시작 시간을 다시 선택해줘.";
-  if (!normalizeTimeText(settings.dndStart)) return "방해금지 시작 시간을 다시 선택해줘.";
-  if (!normalizeTimeText(settings.dndEnd)) return "방해금지 종료 시간을 다시 선택해줘.";
-  const start = parseTime(settings.startTime);
-  const dndStart = parseTime(settings.dndStart);
-  const dndEnd = parseTime(settings.dndEnd);
-  if (start !== null && dndStart !== null && dndEnd !== null && isInDnd(start, dndStart, dndEnd)) {
-    return "시작 시간이 방해금지 시간 안에 있어.\n시작 시간이나 방해금지 시간을 조정해줘.";
+  if (settings.scheduleMode === "random") {
+    if (!settings.weekdays.length) return "요일을 하나 이상 골라줘.";
+    const duration = getTimeWindowDuration(settings.randomStartTime, settings.randomEndTime);
+    if (duration === null) return "랜덤 알림 시간 범위를 다시 선택해줘.";
+    if (duration === 0) return "시작과 종료 시간을 다르게 골라줘.";
+    const maxCount = Math.min(12, Math.floor((duration - 1) / 60) + 1, Math.floor(60 / settings.weekdays.length));
+    if (settings.randomDailyCount > maxCount) {
+      return `선택한 요일과 시간 범위에서는 하루 ${maxCount}번까지 설정할 수 있어.`;
+    }
+    return null;
   }
+
+  if (!normalizeTimeText(settings.startTime)) return "시작 시간을 다시 선택해줘.";
+  if (!normalizeTimeText(settings.endTime)) return "종료 시간을 다시 선택해줘.";
+  if (getTimeWindowDuration(settings.startTime, settings.endTime) === 0) return "시작과 종료 시간을 다르게 골라줘.";
   return null;
 }
 
@@ -488,24 +542,19 @@ function parseTime(value: string) {
   return hour * 60 + minute;
 }
 
-function isInDnd(minuteOfDay: number, dndStart: number, dndEnd: number) {
-  if (dndStart === dndEnd) return false;
-  if (dndStart < dndEnd) return minuteOfDay >= dndStart && minuteOfDay < dndEnd;
-  return minuteOfDay >= dndStart || minuteOfDay < dndEnd;
+function getTimeWindowDuration(startText: string, endText: string) {
+  const start = parseTime(startText);
+  const end = parseTime(endText);
+  if (start === null || end === null) return null;
+  if (start === end) return 0;
+  return end > start ? end - start : 24 * 60 - start + end;
 }
 
 function getIntervalCount(settings: NotificationSettings) {
-  const start = parseTime(settings.startTime);
-  const dndStart = parseTime(settings.dndStart);
-  const dndEnd = parseTime(settings.dndEnd);
+  const duration = getTimeWindowDuration(settings.startTime, settings.endTime);
   const interval = normalizeIntervalMinutes(settings.intervalMinutes);
-  if (start === null || dndStart === null || dndEnd === null) return 0;
-
-  let count = 0;
-  for (let minute = start; minute < 24 * 60 && count < 12; minute += interval) {
-    if (!isInDnd(minute, dndStart, dndEnd)) count += 1;
-  }
-  return count;
+  if (duration === null || duration === 0) return 0;
+  return Math.min(12, Math.floor((duration - 1) / interval) + 1);
 }
 
 function formatTime(value: string) {
@@ -515,6 +564,13 @@ function formatTime(value: string) {
   const period = hour < 12 ? "오전" : "오후";
   const displayHour = hour % 12 || 12;
   return minute ? `${period} ${displayHour}시 ${minute}분` : `${period} ${displayHour}시`;
+}
+
+function formatTimeRange(startText: string, endText: string) {
+  const start = parseTime(startText);
+  const end = parseTime(endText);
+  const nextDay = start !== null && end !== null && end <= start;
+  return `${formatTime(startText)} ~ ${nextDay ? "다음 날 " : ""}${formatTime(endText)}`;
 }
 
 function getNotificationSummary(settings: NotificationSettings) {
@@ -536,13 +592,28 @@ function getNotificationSummary(settings: NotificationSettings) {
     };
   }
 
+  if (normalized.scheduleMode === "random") {
+    const selectedDays = weekdays
+      .filter((day) => normalized.weekdays.includes(day.value))
+      .map((day) => day.label)
+      .join(", ");
+    return {
+      lines: [
+        "방식 · 랜덤 알림",
+        `요일 · ${selectedDays}`,
+        `시간 · ${formatTimeRange(normalized.randomStartTime, normalized.randomEndTime)}`,
+        `횟수 · 하루 ${normalized.randomDailyCount}번`
+      ],
+      countText: `선택한 요일마다 하루 ${normalized.randomDailyCount}번의 기록을 할 수 있어`
+    };
+  }
+
   const count = getIntervalCount(normalized);
   return {
     lines: [
       "방식 · 간격 반복",
-      `시작 · ${formatTime(normalized.startTime)}`,
-      `간격 · ${normalized.intervalMinutes}분마다`,
-      `방해금지 · ${formatTime(normalized.dndStart)} ~ ${formatTime(normalized.dndEnd)}`
+      `시간 · ${formatTimeRange(normalized.startTime, normalized.endTime)}`,
+      `간격 · ${normalized.intervalMinutes}분마다`
     ],
     countText: `하루에 ${count}번의 기록을 할 수 있어`
   };
@@ -629,6 +700,39 @@ const styles = StyleSheet.create({
     color: "#657064",
     fontSize: 13,
     fontWeight: "900"
+  },
+  fieldHelp: {
+    color: "#8b958a",
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "700"
+  },
+  countStepper: {
+    height: 54,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderRadius: 8,
+    backgroundColor: "#fff"
+  },
+  stepperButton: {
+    width: 64,
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  stepperSymbol: {
+    color: "#657064",
+    fontSize: 24,
+    fontWeight: "900"
+  },
+  stepperValue: {
+    fontSize: 19,
+    fontWeight: "900"
+  },
+  disabledText: {
+    opacity: 0.25
   },
   timeWheel: {
     height: TIME_WHEEL_ITEM_HEIGHT * 3 + 2,

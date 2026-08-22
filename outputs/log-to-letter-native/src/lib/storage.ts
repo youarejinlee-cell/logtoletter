@@ -27,11 +27,15 @@ export const defaultState: AppState = {
     enabled: false,
     scheduleMode: "interval",
     startTime: "09:00",
+    endTime: "22:00",
     dndStart: "22:00",
     dndEnd: "08:00",
     intervalMinutes: 120,
     weekdays: [1, 2, 3, 4, 5, 6, 7],
-    fixedTimes: ["10:00"]
+    fixedTimes: ["10:00"],
+    randomStartTime: "09:00",
+    randomEndTime: "22:00",
+    randomDailyCount: 4
   }
 };
 
@@ -69,7 +73,8 @@ function parseAppState(raw: string | null): AppState {
       ...saved,
       settings: {
         ...defaultState.settings,
-        ...(saved.settings || {})
+        ...(saved.settings || {}),
+        endTime: saved.settings?.endTime || saved.settings?.dndStart || defaultState.settings.endTime
       },
       entries: (saved.entries || []).map((entry) => ({
         ...entry,

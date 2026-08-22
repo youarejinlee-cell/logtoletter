@@ -70,13 +70,17 @@ export type Letter = {
 
 export type NotificationSettings = {
   enabled: boolean;
-  scheduleMode: "interval" | "fixed";
+  scheduleMode: "interval" | "fixed" | "random";
   startTime: string;
+  endTime: string;
   dndStart: string;
   dndEnd: string;
   intervalMinutes: number;
   weekdays: number[];
   fixedTimes: string[];
+  randomStartTime: string;
+  randomEndTime: string;
+  randomDailyCount: number;
 };
 
 export type ColorTheme = "red" | "yellow" | "green" | "blue" | "white" | "black";

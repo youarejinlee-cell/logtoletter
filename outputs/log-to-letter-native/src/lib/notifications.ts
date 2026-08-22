@@ -46,10 +46,11 @@ function parseTime(value: string) {
   return hour * 60 + minute;
 }
 
-function isInDnd(minuteOfDay: number, dndStart: number, dndEnd: number) {
-  if (dndStart === dndEnd) return false;
-  if (dndStart < dndEnd) return minuteOfDay >= dndStart && minuteOfDay < dndEnd;
-  return minuteOfDay >= dndStart || minuteOfDay < dndEnd;
+function getTimeWindow(startText: string, endText: string) {
+  const start = parseTime(startText);
+  const rawEnd = parseTime(endText);
+  if (start === null || rawEnd === null || start === rawEnd) return null;
+  return { start, end: rawEnd > start ? rawEnd : rawEnd + 24 * 60 };
 }
 
 function normalizeIntervalMinutes(value: number) {
@@ -58,19 +59,57 @@ function normalizeIntervalMinutes(value: number) {
 }
 
 function getScheduleMinutes(settings: NotificationSettings) {
-  const start = parseTime(settings.startTime);
-  const dndStart = parseTime(settings.dndStart);
-  const dndEnd = parseTime(settings.dndEnd);
+  const window = getTimeWindow(settings.startTime, settings.endTime);
   const interval = normalizeIntervalMinutes(settings.intervalMinutes);
-  if (start === null || dndStart === null || dndEnd === null) return [];
+  if (!window) return [];
 
   const times: number[] = [];
-  for (let minute = start; minute < 24 * 60 && times.length < MAX_DAILY_NOTIFICATIONS; minute += interval) {
-    if (!isInDnd(minute, dndStart, dndEnd)) {
-      times.push(minute);
-    }
+  for (let minute = window.start; minute < window.end && times.length < MAX_DAILY_NOTIFICATIONS; minute += interval) {
+    times.push(minute % (24 * 60));
   }
   return times;
+}
+
+function randomInteger(min: number, max: number) {
+  if (max <= min) return min;
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+function getRandomMinutes(startText: string, endText: string, requestedCount: number) {
+  const window = getTimeWindow(startText, endText);
+  if (!window) return [];
+  const duration = window.end - window.start;
+  const count = Math.max(1, Math.min(MAX_DAILY_NOTIFICATIONS, requestedCount, Math.floor((duration - 1) / 60) + 1));
+  if (count === 1) return [window.start + randomInteger(0, Math.max(0, duration - 1))];
+
+  const gapCount = count - 1;
+  const targetSpan = randomInteger(gapCount * 60, Math.min(duration - 1, gapCount * 180));
+  const startOffset = randomInteger(0, Math.max(0, duration - targetSpan - 1));
+  const times = [window.start + startOffset];
+  let remainingSpan = targetSpan;
+
+  for (let index = 0; index < gapCount; index += 1) {
+    const remainingGaps = gapCount - index - 1;
+    const minGap = Math.max(60, remainingSpan - remainingGaps * 180);
+    const maxGap = Math.min(180, remainingSpan - remainingGaps * 60);
+    const gap = index === gapCount - 1 ? remainingSpan : randomInteger(minGap, maxGap);
+    times.push(times[times.length - 1] + gap);
+    remainingSpan -= gap;
+  }
+  return times;
+}
+
+function getRandomSchedule(settings: NotificationSettings) {
+  const weekdays = (settings.weekdays?.length ? settings.weekdays : [1, 2, 3, 4, 5, 6, 7])
+    .filter((day) => day >= 1 && day <= 7);
+  return weekdays.flatMap((weekday) => getRandomMinutes(
+    settings.randomStartTime,
+    settings.randomEndTime,
+    settings.randomDailyCount
+  ).map((absoluteMinute) => ({
+    weekday: ((weekday - 1 + Math.floor(absoluteMinute / (24 * 60))) % 7) + 1,
+    minuteOfDay: absoluteMinute % (24 * 60)
+  }))).slice(0, 60);
 }
 
 function getFixedSchedule(settings: NotificationSettings) {
@@ -158,8 +197,13 @@ export async function scheduleLogNotifications(settings: NotificationSettings) {
 
   const promptOffset = Math.floor(Math.random() * LOG_NOTIFICATION_PROMPTS.length);
   const promptAt = (index: number) => LOG_NOTIFICATION_PROMPTS[(promptOffset + index) % LOG_NOTIFICATION_PROMPTS.length];
-  const reminderIds = settings.scheduleMode === "fixed"
-    ? await Promise.all(getFixedSchedule(settings).map(({ weekday, minuteOfDay }, index) => {
+  const weeklySchedule = settings.scheduleMode === "fixed"
+    ? getFixedSchedule(settings)
+    : settings.scheduleMode === "random"
+      ? getRandomSchedule(settings)
+      : null;
+  const reminderIds = weeklySchedule
+    ? await Promise.all(weeklySchedule.map(({ weekday, minuteOfDay }, index) => {
       const hour = Math.floor(minuteOfDay / 60);
       const minute = minuteOfDay % 60;
       const prompt = promptAt(index);
