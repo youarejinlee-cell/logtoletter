@@ -880,7 +880,7 @@ const finalV4PlacementAdjustments: Record<Exclude<V4Category, "etc">, V4Placemen
   wealth: {
     land_01: { 2: { y: 50, scale: 0.9 }, 4: { x: -25 } },
     land_02: { 2: { scale: 0.85 }, 4: { x: -70 } },
-    land_03: { 1: { y: -25 }, 2: { y: -75, scale: 0.95 }, 3: { x: 25, y: -50 }, 4: { x: 25, y: -25 } },
+    land_03: { 1: { y: 25 }, 2: { y: -25, scale: 0.95 }, 3: { x: 25 }, 4: { x: 25, y: -25 } },
     land_04: { 2: { scale: 0.95 } },
     land_05: { 2: { x: 25, scale: 0.855 }, 3: { x: 50, scale: 1.05 }, 4: { x: 50, scale: 0.9 } },
     land_06: { 2: { x: 100 }, 3: { x: -25 }, 4: { x: 50, y: 20 } }
