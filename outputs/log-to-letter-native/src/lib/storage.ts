@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppState, ColorTheme, LetterPaperStyle, Mood } from "../types/domain";
 import { normalizeEntryCategory } from "./entryCategories";
 import { normalizeEnergyPercent } from "./energyColors";
+import { defaultRepresentativeEmotionTags, normalizeRepresentativeEmotionTags } from "./emotionTags";
 
 export const STORAGE_KEY = "log-to-letter-native-v1";
 const GUEST_STORAGE_KEY = `${STORAGE_KEY}:guest`;
@@ -20,6 +21,7 @@ export const defaultState: AppState = {
   energyColorMode: "soft",
   calendarEnergyMode: "last",
   targetMoods: [],
+  representativeEmotionTags: defaultRepresentativeEmotionTags,
   letterPaperStyle: "plain",
   settings: {
     enabled: false,
@@ -77,6 +79,7 @@ function parseAppState(raw: string | null): AppState {
       monthlyNotes: normalizeMonthlyNotes(saved.monthlyNotes),
       theme: normalizeColorTheme(saved.theme),
       targetMoods: (saved.targetMoods || []).filter((mood): mood is Mood => validMoods.includes(mood as Mood)).slice(0, 3),
+      representativeEmotionTags: normalizeRepresentativeEmotionTags(saved.representativeEmotionTags),
       letterPaperStyle: normalizeLetterPaperStyle(saved.letterPaperStyle)
     };
     return state;

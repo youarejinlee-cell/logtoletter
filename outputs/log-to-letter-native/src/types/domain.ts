@@ -48,6 +48,7 @@ export type Entry = {
   id: string;
   text: string;
   mood: Mood;
+  moodTag?: EmotionTagId;
   energy: number;
   createdAt: string;
   category?: EntryCategory;
@@ -92,6 +93,8 @@ export type AppState = {
   energyColorMode: EnergyColorMode;
   calendarEnergyMode: CalendarEnergyMode;
   targetMoods: Mood[];
+  representativeEmotionTags: RepresentativeEmotionTags;
   letterPaperStyle: LetterPaperStyle;
   testToday?: string;
 };
+import { EmotionTagId, RepresentativeEmotionTags } from "./emotions";

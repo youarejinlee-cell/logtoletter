@@ -4,8 +4,10 @@ import { CloverBadge } from "../components/CloverBadge";
 import { Screen } from "../components/Screen";
 import { categoryForEntry, entryCategoryLabels } from "../lib/entryCategories";
 import { getEnergyLevel, normalizeEnergyPercent } from "../lib/energyColors";
+import { emotionGroupLabels, emotionGroups, emotionTagIdForEntry, emotionTagLabel, emotionTags } from "../lib/emotionTags";
 import { useAppTheme } from "../lib/theme";
 import { EnergyColorMode, Entry, Mood } from "../types/domain";
+import { EmotionTagId } from "../types/emotions";
 
 type Props = {
   entries: Entry[];
@@ -135,9 +137,9 @@ export function MoodCollectionContent({ entries, energyColorMode }: Props) {
   const [appliedRange, setAppliedRange] = useState(defaultRange);
   const [draftStart, setDraftStart] = useState(defaultRange.start);
   const [draftEnd, setDraftEnd] = useState(defaultRange.end);
-  const [selectedMoods, setSelectedMoods] = useState<Mood[]>([]);
+  const [selectedMoods, setSelectedMoods] = useState<EmotionTagId[]>([]);
   const [draftRangeMode, setDraftRangeMode] = useState<RangeMode>("quarter");
-  const [draftMoods, setDraftMoods] = useState<Mood[]>([]);
+  const [draftMoods, setDraftMoods] = useState<EmotionTagId[]>([]);
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [dateError, setDateError] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
@@ -147,10 +149,11 @@ export function MoodCollectionContent({ entries, energyColorMode }: Props) {
     return key >= appliedRange.start && key <= appliedRange.end;
   }), [entries, appliedRange]);
 
-  const moodCounts = useMemo(() => rangeEntries.reduce<Record<Mood, number>>((acc, entry) => {
-    acc[entry.mood] = (acc[entry.mood] || 0) + 1;
+  const moodCounts = useMemo(() => rangeEntries.reduce<Partial<Record<EmotionTagId, number>>>((acc, entry) => {
+    const tagId = emotionTagIdForEntry(entry);
+    acc[tagId] = (acc[tagId] || 0) + 1;
     return acc;
-  }, {} as Record<Mood, number>), [rangeEntries]);
+  }, {}), [rangeEntries]);
 
   const draftMoodCounts = useMemo(() => {
     const start = parseDateInput(draftStart);
@@ -163,21 +166,22 @@ export function MoodCollectionContent({ entries, energyColorMode }: Props) {
         const key = dateKey(entry.createdAt);
         return key >= startKey && key <= endKey;
       })
-      .reduce<Record<Mood, number>>((acc, entry) => {
-        acc[entry.mood] = (acc[entry.mood] || 0) + 1;
+      .reduce<Partial<Record<EmotionTagId, number>>>((acc, entry) => {
+        const tagId = emotionTagIdForEntry(entry);
+        acc[tagId] = (acc[tagId] || 0) + 1;
         return acc;
-      }, {} as Record<Mood, number>);
+      }, {});
   }, [entries, draftStart, draftEnd, moodCounts]);
 
   const filteredEntries = useMemo(() => rangeEntries
-    .filter((entry) => selectedMoods.length === 0 || selectedMoods.includes(entry.mood))
+    .filter((entry) => selectedMoods.length === 0 || selectedMoods.includes(emotionTagIdForEntry(entry)))
     .sort((a, b) => {
       const left = new Date(a.createdAt).getTime();
       const right = new Date(b.createdAt).getTime();
       return sortDirection === "desc" ? right - left : left - right;
     }), [rangeEntries, selectedMoods, sortDirection]);
 
-  const toggleDraftMood = (mood: Mood) => {
+  const toggleDraftMood = (mood: EmotionTagId) => {
     setDraftMoods((current) => {
       if (current.includes(mood)) return current.filter((item) => item !== mood);
       if (current.length >= 3) return current;
@@ -220,13 +224,13 @@ export function MoodCollectionContent({ entries, energyColorMode }: Props) {
     }
     setRangeMode(draftRangeMode);
     setAppliedRange({ start: dateKey(start), end: dateKey(end) });
-    setSelectedMoods(draftMoods);
+    setSelectedMoods(draftMoods.filter((mood) => (draftMoodCounts[mood] || 0) > 0));
     setFilterOpen(false);
     setDateError("");
   };
 
   const selectedLabel = selectedMoods.length
-    ? selectedMoods.map((mood) => moodLabelMap[mood] || mood).join(", ")
+    ? selectedMoods.map(emotionTagLabel).join(", ")
     : "전체 감정";
 
   return (
@@ -315,19 +319,21 @@ export function MoodCollectionContent({ entries, energyColorMode }: Props) {
                   <Text style={[styles.moodHelp, { color: theme.muted }]}>최대 3개까지 고를 수 있어</Text>
                 </View>
                 <View style={styles.moodBoard}>
-                  {(["긍정", "중간", "부정"] as const).map((group) => (
+                  {emotionGroups.map((group) => {
+                    const usedTags = emotionTags.filter((tag) => tag.group === group && (draftMoodCounts[tag.id] || 0) > 0);
+                    if (!usedTags.length) return null;
+                    return (
                     <View key={group} style={styles.moodGroup}>
-                      <Text style={[styles.groupTitle, { color: theme.muted }]}>{group}</Text>
+                      <Text style={[styles.groupTitle, { color: theme.muted }]}>{emotionGroupLabels[group]}</Text>
                       <View style={styles.moodWrap}>
-                        {moodOptions
-                          .filter((mood) => mood.group === group)
+                        {usedTags
                           .map((mood) => {
-                            const active = draftMoods.includes(mood.key);
+                            const active = draftMoods.includes(mood.id);
                             const disabled = !active && draftMoods.length >= 3;
-                            const count = draftMoodCounts[mood.key] || 0;
+                            const count = draftMoodCounts[mood.id] || 0;
                             return (
                               <Pressable
-                                key={mood.key}
+                                key={mood.id}
                                 disabled={disabled}
                                 style={[
                                   styles.moodChip,
@@ -335,20 +341,23 @@ export function MoodCollectionContent({ entries, energyColorMode }: Props) {
                                   active && { borderColor: theme.tint, backgroundColor: theme.soft },
                                   disabled && styles.moodChipDisabled
                                 ]}
-                                onPress={() => toggleDraftMood(mood.key)}
+                                onPress={() => toggleDraftMood(mood.id)}
                               >
                                 <Text style={[
                                   styles.moodText,
                                   { color: theme.muted },
                                   active && { color: theme.tint },
                                   disabled && styles.moodTextDisabled
-                                ]}>{mood.label}{count ? ` ${count}` : ""}</Text>
+                                ]}>{mood.label} {count}</Text>
                               </Pressable>
                             );
                           })}
                       </View>
                     </View>
-                  ))}
+                  );})}
+                  {!emotionTags.some((tag) => (draftMoodCounts[tag.id] || 0) > 0) ? (
+                    <Text style={[styles.moodHelp, { color: theme.muted }]}>선택한 기간에 사용된 감정 태그가 없어.</Text>
+                  ) : null}
                 </View>
               </View>
             </ScrollView>
@@ -399,7 +408,7 @@ export function MoodCollectionContent({ entries, energyColorMode }: Props) {
                     shadowOpacity={0.14}
                     glowColor="rgba(85, 85, 85, 0.08)"
                   />
-                  <Text style={[styles.cardMood, { color: theme.text }]}>{moodLabelMap[entry.mood]}</Text>
+                  <Text style={[styles.cardMood, { color: theme.text }]}>{emotionTagLabel(emotionTagIdForEntry(entry))}</Text>
                 </View>
                 <Text style={[styles.cardTime, { color: theme.muted }]}>{formatDateLabel(entry.createdAt)} · {formatTimeLabel(entry.createdAt)}</Text>
               </View>

@@ -1,18 +1,21 @@
 import { useRef, useState } from "react";
-import { Keyboard, PanResponder, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Keyboard, PanResponder, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { CloverBadge } from "../components/CloverBadge";
 import { Screen } from "../components/Screen";
+import { EmotionTag, orderedEmotionTags } from "../lib/emotionTags";
 import { entryCategoryOptions, suggestEntryCategory } from "../lib/entryCategories";
 import { getEnergyPalette } from "../lib/energyColors";
 import { entryTextLength, MAX_ENTRY_TEXT_LENGTH } from "../lib/entryText";
 import { createId } from "../lib/ids";
 import { useAppTheme } from "../lib/theme";
 import { EnergyColorMode, Entry, EntryCategory, Mood } from "../types/domain";
+import { EmotionTagId, RepresentativeEmotionTags } from "../types/emotions";
 
 type Props = {
   onAddEntry: (entry: Entry) => void;
   getNow?: () => Date;
   energyColorMode: EnergyColorMode;
+  representativeEmotionTags: RepresentativeEmotionTags;
 };
 
 const hints = [
@@ -31,49 +34,6 @@ const hints = [
   ["쇼츠에서 본", "쇼츠에서 본 건데 "]
 ];
 
-const positiveMoods: Array<{ key: Mood; label: string }> = [
-  { key: "calm", label: "😌 차분함" },
-  { key: "joy", label: "😊 좋음" },
-  { key: "moved", label: "🥹 뭉클함" },
-  { key: "recovered", label: "🌱 회복됨" },
-  { key: "proud", label: "✨ 뿌듯함" },
-  { key: "grateful", label: "🙏 고마움" },
-  { key: "peaceful", label: "🕊️ 평화로움" },
-  { key: "lucky", label: "🍀 행운" },
-  { key: "happy", label: "😄 행복함" },
-  { key: "delight", label: "😁 기쁨" },
-  { key: "excited", label: "💓 설렘" },
-  { key: "fun", label: "😆 재밌음" },
-  { key: "hopeful", label: "🌤️ 희망적임" },
-  { key: "selfEsteem", label: "💪 자존감상승" }
-];
-
-const neutralMoods: Array<{ key: Mood; label: string }> = [
-  { key: "complex", label: "🤔 복잡함" },
-  { key: "indifferent", label: "😶 무덤덤함" },
-  { key: "curious", label: "🧐 궁금함" },
-  { key: "accepting", label: "🤲 받아들임" },
-  { key: "reflective", label: "🪞 반성함" },
-  { key: "envious", label: "🫧 부러움" },
-  { key: "instructive", label: "📌 교훈적임" },
-  { key: "difficult", label: "🧩 어려움" },
-  { key: "blank", label: "🫠 멍함" }
-];
-
-const negativeMoods: Array<{ key: Mood; label: string }> = [
-  { key: "anxious", label: "😟 불안함" },
-  { key: "worried", label: "😥 걱정됨" },
-  { key: "tired", label: "😮‍💨 피곤함" },
-  { key: "sad", label: "😔 가라앉음" },
-  { key: "depressed", label: "🌧️ 우울함" },
-  { key: "angry", label: "😤 날카로움" },
-  { key: "irritated", label: "😒 짜증남" },
-  { key: "jealous", label: "🫣 질투" },
-  { key: "prideHurt", label: "😣 자존심상함" },
-  { key: "sensitive", label: "🫨 예민함" },
-  { key: "regret", label: "😞 후회됨" }
-];
-
 const textPlaceholders = [
   "무슨 생각 하고 있었어?",
   "어떤 감정을 느끼고 있었어?"
@@ -83,9 +43,12 @@ function randomPlaceholder() {
   return textPlaceholders[Math.floor(Math.random() * textPlaceholders.length)];
 }
 
-export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyColorMode }: Props) {
+export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyColorMode, representativeEmotionTags }: Props) {
   const theme = useAppTheme();
   const energyLevels = getEnergyPalette(energyColorMode, theme.tint).levels;
+  const positiveMoods = orderedEmotionTags("positive", representativeEmotionTags.positive);
+  const neutralMoods = orderedEmotionTags("neutral", representativeEmotionTags.neutral);
+  const negativeMoods = orderedEmotionTags("negative", representativeEmotionTags.negative);
   const inputRef = useRef<TextInput | null>(null);
   const sliderRef = useRef<View | null>(null);
   const sliderLeft = useRef(0);
@@ -93,14 +56,15 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
   const [hasText, setHasText] = useState(false);
   const [characterCount, setCharacterCount] = useState(0);
   const [mood, setMood] = useState<Mood | null>(null);
+  const [moodTag, setMoodTag] = useState<EmotionTagId | null>(null);
   const [category, setCategory] = useState<EntryCategory>("other");
   const [categoryTouched, setCategoryTouched] = useState(false);
   const [energy, setEnergy] = useState(50);
   const [sliderWidth, setSliderWidth] = useState(1);
   const [placeholder, setPlaceholder] = useState(randomPlaceholder);
-  const [positiveExpanded, setPositiveExpanded] = useState(true);
-  const [neutralExpanded, setNeutralExpanded] = useState(true);
-  const [negativeExpanded, setNegativeExpanded] = useState(true);
+  const [positiveExpanded, setPositiveExpanded] = useState(false);
+  const [neutralExpanded, setNeutralExpanded] = useState(false);
+  const [negativeExpanded, setNegativeExpanded] = useState(false);
   const energyValue = energy;
   const canSubmit = Boolean(hasText && mood);
   const energyLevel = energyLevels.find((level) => level.value === energyValue) || energyLevels[0];
@@ -289,13 +253,15 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
       <Text style={[styles.sectionTitle, { color: theme.text }]}>감정</Text>
       <MoodGroup
         title="긍정 감정"
-        moods={positiveExpanded ? positiveMoods : positiveMoods.slice(0, 6)}
+        moods={positiveExpanded ? positiveMoods : positiveMoods.slice(0, 4)}
+        representativeIds={representativeEmotionTags.positive}
         expanded={positiveExpanded}
         onToggle={() => setPositiveExpanded((current) => !current)}
-        selected={mood}
+        selected={moodTag}
         onSelect={(selectedMood) => {
           dismissEntryKeyboard();
-          setMood(selectedMood);
+          setMoodTag(selectedMood.id);
+          setMood(selectedMood.legacyMood);
         }}
         themeTint={theme.tint}
         themeSoft={theme.soft}
@@ -307,13 +273,15 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
       />
       <MoodGroup
         title="중간 감정"
-        moods={neutralExpanded ? neutralMoods : neutralMoods.slice(0, 6)}
+        moods={neutralExpanded ? neutralMoods : neutralMoods.slice(0, 4)}
+        representativeIds={representativeEmotionTags.neutral}
         expanded={neutralExpanded}
         onToggle={() => setNeutralExpanded((current) => !current)}
-        selected={mood}
+        selected={moodTag}
         onSelect={(selectedMood) => {
           dismissEntryKeyboard();
-          setMood(selectedMood);
+          setMoodTag(selectedMood.id);
+          setMood(selectedMood.legacyMood);
         }}
         themeTint={theme.tint}
         themeSoft={theme.soft}
@@ -325,13 +293,15 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
       />
       <MoodGroup
         title="부정 감정"
-        moods={negativeExpanded ? negativeMoods : negativeMoods.slice(0, 6)}
+        moods={negativeExpanded ? negativeMoods : negativeMoods.slice(0, 4)}
+        representativeIds={representativeEmotionTags.negative}
         expanded={negativeExpanded}
         onToggle={() => setNegativeExpanded((current) => !current)}
-        selected={mood}
+        selected={moodTag}
         onSelect={(selectedMood) => {
           dismissEntryKeyboard();
-          setMood(selectedMood);
+          setMoodTag(selectedMood.id);
+          setMood(selectedMood.legacyMood);
         }}
         themeTint={theme.tint}
         themeSoft={theme.soft}
@@ -356,6 +326,7 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
             id: createId(),
             text,
             mood,
+            moodTag: moodTag || undefined,
             energy,
             createdAt: getNow().toISOString(),
             category
@@ -363,6 +334,7 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
           dismissEntryKeyboard();
           replaceInputText("");
           setMood(null);
+          setMoodTag(null);
           setCategory("other");
           setCategoryTouched(false);
           setEnergy(50);
@@ -378,6 +350,7 @@ export function CaptureScreen({ onAddEntry, getNow = () => new Date(), energyCol
 function MoodGroup({
   title,
   moods,
+  representativeIds,
   expanded,
   selected,
   onToggle,
@@ -391,11 +364,12 @@ function MoodGroup({
   themeBorder
 }: {
   title: string;
-  moods: Array<{ key: Mood; label: string }>;
+  moods: EmotionTag[];
+  representativeIds: EmotionTagId[];
   expanded: boolean;
-  selected: Mood | null;
+  selected: string | null;
   onToggle: () => void;
-  onSelect: (mood: Mood) => void;
+  onSelect: (mood: EmotionTag) => void;
   themeTint: string;
   themeSoft: string;
   themeText: string;
@@ -413,42 +387,34 @@ function MoodGroup({
         </Pressable>
       </View>
       <View style={styles.chips}>
-        {moods.map((item) => {
-          const separatorIndex = item.label.indexOf(" ");
-          const emoji = separatorIndex >= 0 ? item.label.slice(0, separatorIndex) : "";
-          const label = separatorIndex >= 0 ? item.label.slice(separatorIndex + 1) : item.label;
-
-          return (
-            <Pressable
-              key={item.key}
+        {moods.map((item) => (
+          <Pressable
+            key={item.id}
+            accessibilityRole="button"
+            accessibilityState={{ selected: selected === item.id }}
+            style={[
+              styles.chip,
+              styles.moodChip,
+              { borderColor: themeBorder, backgroundColor: themeCardAlt },
+              selected === item.id && { borderColor: themeTint, backgroundColor: themeSoft }
+            ]}
+            onPress={() => onSelect(item)}
+          >
+            <Text
+              allowFontScaling={false}
+              maxFontSizeMultiplier={1.2}
+              numberOfLines={1}
               style={[
-                styles.chip,
-                styles.moodChip,
-                { borderColor: themeBorder, backgroundColor: themeCardAlt },
-                selected === item.key && { borderColor: themeTint, backgroundColor: themeSoft }
+                styles.chipText,
+                styles.moodChipText,
+                { color: representativeIds.includes(item.id) ? themeText : themeMuted },
+                selected === item.id && { color: themeTint }
               ]}
-              onPress={() => onSelect(item.key)}
             >
-              {emoji ? (
-                <Text allowFontScaling={false} style={styles.moodEmoji}>
-                  {emoji}
-                </Text>
-              ) : null}
-              <Text
-                maxFontSizeMultiplier={1.2}
-                numberOfLines={1}
-                style={[
-                  styles.chipText,
-                  styles.moodChipText,
-                  { color: themeMuted },
-                  selected === item.key && { color: themeTint }
-                ]}
-              >
-                {label}
-              </Text>
-            </Pressable>
-          );
-        })}
+              {item.label}
+            </Text>
+          </Pressable>
+        ))}
       </View>
     </View>
   );
@@ -557,17 +523,16 @@ const styles = StyleSheet.create({
   },
   moodChip: {
     minHeight: 42,
-    flexDirection: "row",
+    minWidth: 72,
     alignItems: "center",
-    gap: 6
-  },
-  moodEmoji: {
-    fontSize: 16,
-    fontWeight: "400"
+    justifyContent: "center"
   },
   moodChipText: {
     fontSize: 14,
-    lineHeight: 20
+    lineHeight: 20,
+    fontWeight: Platform.OS === "android" ? "700" : "800",
+    includeFontPadding: false,
+    textAlign: "center"
   },
   energyPanel: {
     gap: 12,

@@ -904,12 +904,10 @@ export default function App() {
     }
   };
 
-  const setTargetMoods = (targetMoods: Mood[]) => {
-    setState((current) => {
-      const next = { ...current, targetMoods };
-      if (user) upsertRemoteSettings(user.id, next).catch((error) => console.warn("Supabase target moods sync failed", error));
-      return next;
-    });
+  const saveRepresentativeEmotionTags = async (representativeEmotionTags: AppState["representativeEmotionTags"]) => {
+    const next = { ...state, representativeEmotionTags };
+    setState(next);
+    if (user) await upsertRemoteSettings(user.id, next);
   };
 
   const saveMonthlyNote = (monthKey: string, note: string) => {
@@ -1041,7 +1039,7 @@ export default function App() {
         monthFocusRequest={hydrated ? universeMonthFocusRequest : null}
       />
     ),
-    capture: <CaptureScreen onAddEntry={addEntry} getNow={() => nowForState(state)} energyColorMode={state.energyColorMode} />,
+    capture: <CaptureScreen onAddEntry={addEntry} getNow={() => nowForState(state)} energyColorMode={state.energyColorMode} representativeEmotionTags={state.representativeEmotionTags} />,
     calendar: (
       <CalendarScreen
         entries={state.entries}
@@ -1130,10 +1128,10 @@ export default function App() {
     ),
     appSettings: (
       <AppSettingsScreen
-        targetMoods={state.targetMoods}
+        representativeEmotionTags={state.representativeEmotionTags}
         letterPaperStyle={state.letterPaperStyle}
         letterArchiveEnabled={LETTER_ARCHIVE_ENABLED}
-        onChangeTargetMoods={setTargetMoods}
+        onSaveRepresentativeEmotionTags={saveRepresentativeEmotionTags}
         onChangeLetterPaperStyle={(letterPaperStyle) => setState((current) => {
           const next = { ...current, letterPaperStyle };
           if (user) upsertRemoteSettings(user.id, next).catch((error) => console.warn("Supabase letter paper sync failed", error));

@@ -1,32 +1,18 @@
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Screen } from "../components/Screen";
+import { emotionGroupLabels, emotionGroups, getEmotionTag, tagsForEmotionGroup } from "../lib/emotionTags";
 import { useAppTheme } from "../lib/theme";
-import { LetterPaperStyle, Mood } from "../types/domain";
+import { LetterPaperStyle } from "../types/domain";
+import { EmotionGroup, EmotionTagId, RepresentativeEmotionTags } from "../types/emotions";
 
 type Props = {
-  targetMoods: Mood[];
+  representativeEmotionTags: RepresentativeEmotionTags;
   letterPaperStyle: LetterPaperStyle;
   letterArchiveEnabled?: boolean;
-  onChangeTargetMoods: (moods: Mood[]) => void;
+  onSaveRepresentativeEmotionTags: (tags: RepresentativeEmotionTags) => Promise<void>;
   onChangeLetterPaperStyle: (style: LetterPaperStyle) => void;
 };
-
-const positiveMoodOptions: Array<{ key: Mood; label: string }> = [
-  { key: "calm", label: "😌 차분함" },
-  { key: "joy", label: "😊 좋음" },
-  { key: "moved", label: "🥹 뭉클함" },
-  { key: "recovered", label: "🌱 회복됨" },
-  { key: "happy", label: "😄 행복함" },
-  { key: "delight", label: "😁 기쁨" },
-  { key: "excited", label: "💓 설렘" },
-  { key: "fun", label: "😆 재밌음" },
-  { key: "hopeful", label: "🌤️ 희망적임" },
-  { key: "grateful", label: "🙏 고마움" },
-  { key: "proud", label: "✨ 뿌듯함" },
-  { key: "peaceful", label: "🕊️ 평화로움" },
-  { key: "lucky", label: "🍀 행운" },
-  { key: "selfEsteem", label: "💪 자존감상승" }
-];
 
 const letterPaperOptions: Array<{ key: LetterPaperStyle; label: string; description: string }> = [
   { key: "plain", label: "무지", description: "가장 조용한 기본 편지지" },
@@ -36,48 +22,114 @@ const letterPaperOptions: Array<{ key: LetterPaperStyle; label: string; descript
 ];
 
 export function AppSettingsScreen({
-  targetMoods,
+  representativeEmotionTags,
   letterPaperStyle,
   letterArchiveEnabled,
-  onChangeTargetMoods,
+  onSaveRepresentativeEmotionTags,
   onChangeLetterPaperStyle
 }: Props) {
   const currentTheme = useAppTheme();
-  const toggleTargetMood = (mood: Mood) => {
-    if (targetMoods.includes(mood)) {
-      onChangeTargetMoods(targetMoods.filter((item) => item !== mood));
-      return;
-    }
-    if (targetMoods.length >= 3) return;
-    onChangeTargetMoods([...targetMoods, mood]);
+  const [representativeDraft, setRepresentativeDraft] = useState(representativeEmotionTags);
+  const [expandedGroups, setExpandedGroups] = useState<Record<EmotionGroup, boolean>>({
+    positive: false,
+    neutral: false,
+    negative: false
+  });
+  const [representativeSaveState, setRepresentativeSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  useEffect(() => {
+    setRepresentativeDraft(representativeEmotionTags);
+  }, [representativeEmotionTags]);
+
+  const toggleRepresentativeTag = (group: EmotionGroup, id: EmotionTagId) => {
+    setRepresentativeSaveState("idle");
+    setRepresentativeDraft((current) => {
+      const selected = current[group];
+      if (selected.includes(id)) {
+        return { ...current, [group]: selected.filter((item) => item !== id) };
+      }
+      if (selected.length >= 4) return current;
+      return { ...current, [group]: [...selected, id] };
+    });
   };
 
+  const saveRepresentativeTags = async () => {
+    if (emotionGroups.some((group) => representativeDraft[group].length !== 4)) {
+      setRepresentativeSaveState("error");
+      return;
+    }
+    setRepresentativeSaveState("saving");
+    try {
+      await onSaveRepresentativeEmotionTags(representativeDraft);
+      setRepresentativeSaveState("saved");
+    } catch {
+      setRepresentativeSaveState("error");
+    }
+  };
   return (
     <Screen eyebrow="Settings" title="설정">
       <View style={[styles.panel, { borderColor: currentTheme.border, backgroundColor: currentTheme.card }]}>
-        <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>추구 감정</Text>
-        <Text style={[styles.description, { color: currentTheme.muted }]}>네가 가장 느끼고 싶은 감정을 골라줘. 필터 보기에서 가장 먼저 확인하게 해둘게</Text>
-        <View style={styles.moodWrap}>
-          {positiveMoodOptions.map((mood) => {
-            const active = targetMoods.includes(mood.key);
-            const disabled = !active && targetMoods.length >= 3;
+        <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>대표 감정 태그</Text>
+        <Text style={[styles.description, { color: currentTheme.muted }]}>기록 탭에 먼저 보일 감정을 각 영역에서 4개씩 골라줘. 저장하기 전까지는 기록 탭에 반영되지 않아.</Text>
+        <View style={styles.representativeGroups}>
+          {emotionGroups.map((group) => {
+            const selectedIds = representativeDraft[group];
+            const expanded = expandedGroups[group];
+            const visibleTags = expanded
+              ? tagsForEmotionGroup(group)
+              : selectedIds.map((id) => getEmotionTag(id)).filter((tag) => tag !== null);
             return (
-              <Pressable
-                key={mood.key}
-                disabled={disabled}
-                style={[
-                  styles.moodChip,
-                  { borderColor: currentTheme.border, backgroundColor: currentTheme.cardAlt },
-                  active && { borderColor: currentTheme.tint, backgroundColor: currentTheme.soft, borderWidth: 2 },
-                  disabled && styles.disabledChip
-                ]}
-                onPress={() => toggleTargetMood(mood.key)}
-              >
-                <Text style={[styles.moodText, { color: currentTheme.text }, active && { color: currentTheme.tint }, disabled && styles.disabledText]}>{mood.label}</Text>
-              </Pressable>
+              <View key={group} style={[styles.representativeGroup, { borderTopColor: currentTheme.border }]}>
+                <View style={styles.representativeHeader}>
+                  <View style={styles.representativeHeading}>
+                    <Text style={[styles.representativeTitle, { color: currentTheme.text }]}>{emotionGroupLabels[group]}</Text>
+                    <Text style={[styles.representativeCount, { color: currentTheme.muted }]}>{selectedIds.length} / 4</Text>
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${emotionGroupLabels[group]} ${expanded ? "접기" : "펼치기"}`}
+                    style={[styles.expandButton, { backgroundColor: currentTheme.soft }]}
+                    onPress={() => setExpandedGroups((current) => ({ ...current, [group]: !current[group] }))}
+                  >
+                    <Text style={[styles.expandText, { color: currentTheme.tint }]}>{expanded ? "−" : "+"}</Text>
+                  </Pressable>
+                </View>
+                <View style={styles.moodWrap}>
+                  {visibleTags.map((tag) => {
+                    const active = selectedIds.includes(tag.id);
+                    const disabled = !active && selectedIds.length >= 4;
+                    return (
+                      <Pressable
+                        key={tag.id}
+                        disabled={disabled}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active, disabled }}
+                        style={[
+                          styles.moodChip,
+                          { borderColor: currentTheme.border, backgroundColor: currentTheme.cardAlt },
+                          active && { borderColor: currentTheme.tint, backgroundColor: currentTheme.soft, borderWidth: 2 },
+                          disabled && styles.disabledChip
+                        ]}
+                        onPress={() => toggleRepresentativeTag(group, tag.id)}
+                      >
+                        <Text maxFontSizeMultiplier={1.2} style={[styles.moodText, { color: currentTheme.text }, active && { color: currentTheme.tint }]}>{tag.label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
             );
           })}
         </View>
+        {representativeSaveState === "error" ? <Text style={styles.saveError}>각 영역에서 대표 감정을 4개씩 선택해줘.</Text> : null}
+        {representativeSaveState === "saved" ? <Text style={[styles.saveStatus, { color: currentTheme.tint }]}>기록 탭에 대표 감정을 반영했어.</Text> : null}
+        <Pressable
+          disabled={representativeSaveState === "saving"}
+          style={[styles.saveButton, { backgroundColor: currentTheme.tint }, representativeSaveState === "saving" && styles.disabledChip]}
+          onPress={() => void saveRepresentativeTags()}
+        >
+          <Text style={[styles.saveButtonText, { color: currentTheme.inverseText }]}>{representativeSaveState === "saving" ? "저장 중..." : "저장"}</Text>
+        </Pressable>
       </View>
 
       {letterArchiveEnabled ? (
@@ -147,6 +199,45 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: "700"
   },
+  representativeGroups: {
+    gap: 12
+  },
+  representativeGroup: {
+    gap: 10,
+    paddingTop: 12,
+    borderTopWidth: 1
+  },
+  representativeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12
+  },
+  representativeHeading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  representativeTitle: {
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  representativeCount: {
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  expandButton: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 8
+  },
+  expandText: {
+    fontSize: 18,
+    lineHeight: 21,
+    fontWeight: "900"
+  },
   moodWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -168,6 +259,24 @@ const styles = StyleSheet.create({
   },
   disabledText: {
     color: "#9aa39a"
+  },
+  saveError: {
+    color: "#d85b52",
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  saveStatus: {
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  saveButton: {
+    alignItems: "center",
+    paddingVertical: 13,
+    borderRadius: 8
+  },
+  saveButtonText: {
+    fontSize: 14,
+    fontWeight: "900"
   },
   themeGrid: {
     flexDirection: "row",

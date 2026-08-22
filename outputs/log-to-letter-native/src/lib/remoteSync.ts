@@ -2,6 +2,7 @@ import { User } from "@supabase/supabase-js";
 import { AppState, Entry, Letter, Mood, NotificationSettings } from "../types/domain";
 import { categoryForEntry, normalizeEntryCategory } from "./entryCategories";
 import { normalizeEnergyPercent } from "./energyColors";
+import { isEmotionTagId, normalizeRepresentativeEmotionTags } from "./emotionTags";
 import { createId, isUuid } from "./ids";
 import { getUserDisplayName } from "./profile";
 import { normalizeColorTheme, normalizeLetterPaperStyle, normalizeMonthlyNotes } from "./storage";
@@ -11,6 +12,7 @@ type EntryRow = {
   id: string;
   text: string;
   mood: string;
+  mood_tag?: string | null;
   energy: number;
   created_at: string;
   category?: string | null;
@@ -50,6 +52,7 @@ type AppSettingsRow = {
     letterPaperStyle?: AppState["letterPaperStyle"];
     targetMoods?: AppState["targetMoods"];
     monthlyNotes?: AppState["monthlyNotes"];
+    representativeEmotionTags?: AppState["representativeEmotionTags"];
   } | null;
 };
 
@@ -89,6 +92,7 @@ function entryToRow(userId: string, entry: Entry) {
     user_id: userId,
     text: entry.text,
     mood: entry.mood,
+    mood_tag: entry.moodTag || null,
     energy: normalizeEnergyPercent(entry.energy),
     category: categoryForEntry(entry),
     source: "native",
@@ -102,6 +106,7 @@ function rowToEntry(row: EntryRow): Entry {
     id: row.id,
     text: row.text,
     mood: row.mood as Mood,
+    moodTag: isEmotionTagId(row.mood_tag) ? row.mood_tag : undefined,
     energy: normalizeEnergyPercent(row.energy),
     createdAt: row.created_at
   };
@@ -229,7 +234,8 @@ export async function pushAppState(userId: string, state: AppState) {
       calendarEnergyMode: normalized.calendarEnergyMode,
       letterPaperStyle: normalized.letterPaperStyle,
       targetMoods: normalized.targetMoods || [],
-      monthlyNotes: normalized.monthlyNotes || {}
+      monthlyNotes: normalized.monthlyNotes || {},
+      representativeEmotionTags: normalized.representativeEmotionTags
     },
     updated_at: new Date().toISOString()
   });
@@ -245,7 +251,7 @@ export async function pullAppState(userId: string, local: AppState): Promise<App
     notificationResult,
     settingsResult
   ] = await Promise.all([
-    supabase.from("entries").select("id,text,mood,energy,category,created_at").eq("user_id", userId).order("created_at", { ascending: false }),
+    supabase.from("entries").select("id,text,mood,mood_tag,energy,category,created_at").eq("user_id", userId).order("created_at", { ascending: false }),
     supabase.from("letters").select("id,title,body,period_start,period_end,delivered_at,summary_json,themes,recommendations,postscript,model,prompt_version").eq("user_id", userId).order("delivered_at", { ascending: false }),
     supabase.from("notification_settings").select("enabled,schedule_mode,start_time,interval_minutes,dnd_start,dnd_end,weekdays,fixed_times").eq("user_id", userId).maybeSingle(),
     supabase.from("app_settings").select("preferences").eq("user_id", userId).maybeSingle()
@@ -268,6 +274,7 @@ export async function pullAppState(userId: string, local: AppState): Promise<App
     calendarEnergyMode: preferences.calendarEnergyMode || local.calendarEnergyMode,
     targetMoods: preferences.targetMoods || local.targetMoods || [],
     monthlyNotes: normalizeMonthlyNotes(preferences.monthlyNotes || local.monthlyNotes),
+    representativeEmotionTags: normalizeRepresentativeEmotionTags(preferences.representativeEmotionTags || local.representativeEmotionTags),
     letterPaperStyle: normalizeLetterPaperStyle(preferences.letterPaperStyle || local.letterPaperStyle)
   };
 }
