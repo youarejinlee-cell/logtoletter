@@ -1796,6 +1796,8 @@ function CategoryPlanetCloseup({
   viewportWidth: number;
 }) {
   const [loadedLayerKeys, setLoadedLayerKeys] = useState<Set<string>>(() => new Set());
+  const [baseLoadState, setBaseLoadState] = useState<"loading" | "loaded" | "error">("loading");
+  const [baseRetryKey, setBaseRetryKey] = useState(0);
   const slotKey = categoryKey === "etc" ? "etc_lake" : v4RankSlots[assetRank - 1];
   const slot = v4Slots[slotKey];
   const viewportHeight = Math.min(320, viewportWidth * 0.72);
@@ -1816,10 +1818,16 @@ function CategoryPlanetCloseup({
   const layerLoadKey = `${categoryKey}-${slotKey}-${categoryCount}`;
   const loadedLayerCount = [...loadedLayerKeys].filter((key) => key.startsWith(`${layerLoadKey}-`)).length;
   const layersReady = selectedLayers.length === 0 || loadedLayerCount >= selectedLayers.length;
+  const sceneReady = baseLoadState === "loaded" && layersReady;
   const focusX = (detailBounds.x + detailBounds.width / 2) * detailScale;
   const focusY = (detailBounds.y + detailBounds.height / 2) * detailScale;
   const closeupDeco = activeV4Deco(data);
   const closeupMoodDeco = activeV4MoodDeco(continents, data).filter((asset) => asset.slot === slotKey);
+
+  useEffect(() => {
+    setBaseLoadState("loading");
+    setBaseRetryKey(0);
+  }, [slotKey]);
 
   return (
     <View style={[styles.categoryCloseupViewport, { height: viewportHeight }]}>
@@ -1834,11 +1842,21 @@ function CategoryPlanetCloseup({
         }}
       >
         <Image source={v4BackgroundAsset} style={styles.v4UniverseBackground} resizeMode="cover" />
-        <View style={[styles.planetAssetWrap, { width: renderWidth, height: renderHeight }]}>
+        <View style={[styles.planetAssetWrap, { width: renderWidth, height: renderHeight, opacity: sceneReady ? 1 : 0 }]}>
           {closeupDeco.filter((asset) => asset.layer === "background").map((asset) => (
             <Image key={asset.key} source={asset.source} style={[styles.v4DecoImage, v4DecoFrame(asset, renderWidth, renderHeight), asset.rotation ? { transform: [{ rotate: `${asset.rotation}deg` }] } : null]} resizeMode="contain" />
           ))}
-          <Image source={v4BarePlanetAsset} style={styles.planetAssetImage} resizeMode="contain" resizeMethod="resize" />
+          <Image
+            key={`closeup-base-${slotKey}-${baseRetryKey}`}
+            source={v4BarePlanetAsset}
+            style={{ width: renderWidth, height: renderHeight }}
+            resizeMode="contain"
+            onLoad={() => setBaseLoadState("loaded")}
+            onError={() => {
+              console.warn("[UNIVERSE] closeup base image failed", { slotKey });
+              setBaseLoadState("error");
+            }}
+          />
           {closeupDeco.filter((asset) => asset.layer === "boundary").map((asset) => (
             <Image key={asset.key} source={asset.source} style={[styles.v4DecoImage, v4DecoFrame(asset, renderWidth, renderHeight), asset.rotation ? { transform: [{ rotate: `${asset.rotation}deg` }] } : null]} resizeMode="contain" />
           ))}
@@ -1867,10 +1885,24 @@ function CategoryPlanetCloseup({
           </View>
         </View>
       </View>
-      {!layersReady ? (
-        <View style={styles.categoryCloseupLoading} pointerEvents="none">
-          <ActivityIndicator size="small" color="#bfe0ff" />
-          <Text style={styles.categoryCloseupLoadingText}>대륙 불러오는 중...</Text>
+      {!sceneReady ? (
+        <View style={styles.categoryCloseupLoading} pointerEvents={baseLoadState === "error" ? "auto" : "none"}>
+          {baseLoadState === "error" ? (
+            <Pressable
+              style={styles.categoryCloseupRetryButton}
+              onPress={() => {
+                setBaseLoadState("loading");
+                setBaseRetryKey((current) => current + 1);
+              }}
+            >
+              <Text style={styles.categoryCloseupRetryText}>다시 불러오기</Text>
+            </Pressable>
+          ) : (
+            <ActivityIndicator size="small" color="#bfe0ff" />
+          )}
+          <Text style={styles.categoryCloseupLoadingText}>
+            {baseLoadState === "error" ? "행성 이미지를 불러오지 못했어." : "대륙 불러오는 중..."}
+          </Text>
         </View>
       ) : null}
     </View>
@@ -3002,6 +3034,17 @@ const styles = StyleSheet.create({
     color: "#dcecff",
     fontSize: 12,
     fontWeight: "800"
+  },
+  categoryCloseupRetryButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 6,
+    backgroundColor: "#bfe0ff"
+  },
+  categoryCloseupRetryText: {
+    color: "#07102e",
+    fontSize: 12,
+    fontWeight: "900"
   },
   categoryDetailPanel: {
     flex: 1,
