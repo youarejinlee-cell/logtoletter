@@ -2024,8 +2024,18 @@ function touchMidpoint(touches: readonly TouchPoint[]) {
   if (touches.length < 2) return { x: 0, y: 0 };
   const [first, second] = touches;
   return {
-    x: ((first.locationX ?? first.pageX) + (second.locationX ?? second.pageX)) / 2,
-    y: ((first.locationY ?? first.pageY) + (second.locationY ?? second.pageY)) / 2
+    x: (first.pageX + second.pageX) / 2,
+    y: (first.pageY + second.pageY) / 2
+  };
+}
+
+function clampPlanetPan(offset: { x: number; y: number }, zoom: number, width: number, height: number) {
+  if (zoom <= 1) return { x: 0, y: 0 };
+  const maxX = width * (zoom - 1) / 2;
+  const maxY = height * (zoom - 1) / 2;
+  return {
+    x: Math.max(-maxX, Math.min(maxX, offset.x)),
+    y: Math.max(-maxY, Math.min(maxY, offset.y))
   };
 }
 
@@ -2121,56 +2131,148 @@ function PlanetIllustration({
     };
   });
   const [zoom, setZoom] = useState(1);
-  const [zoomOrigin, setZoomOrigin] = useState({ x: 0, y: 0 });
+  const [zoomTargetVisible, setZoomTargetVisible] = useState(false);
+  const zoomAnimated = useRef(new Animated.Value(1)).current;
+  const panAnimated = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const zoomTargetAnimated = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const stageRef = useRef<View | null>(null);
   const stageLayout = useRef({ width: size, height: stageHeight });
+  const stagePageOrigin = useRef({ x: 0, y: 0 });
+  const planetBaseCenter = useRef({ x: size / 2, y: stageHeight / 2 });
   const zoomRef = useRef(1);
-  const zoomOriginRef = useRef({ x: 0, y: 0 });
+  const displayedZoomRef = useRef(1);
+  const panOffsetRef = useRef({ x: 0, y: 0 });
+  const lastZoomTarget = useRef({ x: size / 2, y: stageHeight / 2 });
   const pinchStartDistance = useRef(0);
   const pinchStartZoom = useRef(1);
-  const planetTransform = [
-    { translateX: zoomOrigin.x * (1 - zoom) },
-    { translateY: zoomOrigin.y * (1 - zoom) },
-    { scale: zoom }
-  ];
-  const originFromTouches = (touches: readonly TouchPoint[]) => {
-    const midpoint = touchMidpoint(touches);
-    const layout = stageLayout.current;
-    return {
-      x: midpoint.x - layout.width / 2,
-      y: midpoint.y - layout.height / 2
-    };
+  const pinchStartMidpoint = useRef({ x: 0, y: 0 });
+  const pinchStartPan = useRef({ x: 0, y: 0 });
+  const dragStartPan = useRef({ x: 0, y: 0 });
+  const zoomTargetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stagePointFromPage = (point: { x: number; y: number }) => ({
+    x: point.x - stagePageOrigin.current.x,
+    y: point.y - stagePageOrigin.current.y
+  });
+  const midpointFromTouches = (touches: readonly TouchPoint[]) => stagePointFromPage(touchMidpoint(touches));
+  const pointFromTouch = (touch: TouchPoint | undefined) => stagePointFromPage({
+    x: touch?.pageX ?? stagePageOrigin.current.x + stageLayout.current.width / 2,
+    y: touch?.pageY ?? stagePageOrigin.current.y + stageLayout.current.height / 2
+  });
+  const showZoomTarget = (target: { x: number; y: number }) => {
+    if (zoomTargetTimer.current) clearTimeout(zoomTargetTimer.current);
+    lastZoomTarget.current = target;
+    zoomTargetAnimated.setValue({ x: target.x - 24, y: target.y - 24 });
+    setZoomTargetVisible(true);
   };
-  const setPlanetZoom = (nextZoom: number, nextOrigin = zoomOriginRef.current) => {
-    const clamped = clampZoom(nextZoom);
-    zoomRef.current = clamped;
-    zoomOriginRef.current = nextOrigin;
-    setZoom(clamped);
-    setZoomOrigin(nextOrigin);
+  const hideZoomTargetSoon = () => {
+    if (zoomTargetTimer.current) clearTimeout(zoomTargetTimer.current);
+    zoomTargetTimer.current = setTimeout(() => setZoomTargetVisible(false), 650);
+  };
+  const updatePlanetZoom = (nextZoom: number, nextPan: { x: number; y: number }, commitDisplay = false) => {
+    const clampedZoom = clampZoom(nextZoom);
+    const clampedPan = clampPlanetPan(nextPan, clampedZoom, visualWidth, visualHeight);
+    zoomRef.current = clampedZoom;
+    panOffsetRef.current = clampedPan;
+    zoomAnimated.setValue(clampedZoom);
+    panAnimated.setValue(clampedPan);
+    if (commitDisplay || Math.abs(clampedZoom - displayedZoomRef.current) >= 0.05) {
+      displayedZoomRef.current = clampedZoom;
+      setZoom(clampedZoom);
+    }
+  };
+  const zoomAroundPoint = (nextZoom: number, target = lastZoomTarget.current) => {
+    const previousZoom = zoomRef.current;
+    const clampedZoom = clampZoom(nextZoom);
+    const center = planetBaseCenter.current;
+    const currentPan = panOffsetRef.current;
+    const contentPoint = {
+      x: (target.x - center.x - currentPan.x) / previousZoom,
+      y: (target.y - center.y - currentPan.y) / previousZoom
+    };
+    const nextPan = {
+      x: target.x - center.x - contentPoint.x * clampedZoom,
+      y: target.y - center.y - contentPoint.y * clampedZoom
+    };
+    showZoomTarget(target);
+    updatePlanetZoom(clampedZoom, nextPan, true);
+    hideZoomTargetSoon();
+  };
+  const resetPlanetZoom = () => {
+    const center = planetBaseCenter.current;
+    lastZoomTarget.current = center;
+    setZoomTargetVisible(false);
+    updatePlanetZoom(1, { x: 0, y: 0 }, true);
+  };
+
+  useEffect(() => () => {
+    if (zoomTargetTimer.current) clearTimeout(zoomTargetTimer.current);
+  }, []);
+
+  const setPinchZoom = (nextZoom: number, currentMidpoint: { x: number; y: number }) => {
+    const clampedZoom = clampZoom(nextZoom);
+    const center = planetBaseCenter.current;
+    const startMidpoint = pinchStartMidpoint.current;
+    const startPan = pinchStartPan.current;
+    const contentPoint = {
+      x: (startMidpoint.x - center.x - startPan.x) / pinchStartZoom.current,
+      y: (startMidpoint.y - center.y - startPan.y) / pinchStartZoom.current
+    };
+    updatePlanetZoom(clampedZoom, {
+      x: currentMidpoint.x - center.x - contentPoint.x * clampedZoom,
+      y: currentMidpoint.y - center.y - contentPoint.y * clampedZoom
+    });
+    showZoomTarget(currentMidpoint);
   };
   const panResponder = useRef(PanResponder.create({
     onStartShouldSetPanResponder: (event) => event.nativeEvent.touches.length >= 2,
     onMoveShouldSetPanResponder: (event, gesture) => {
       if (event.nativeEvent.touches.length >= 2) return true;
+      if (zoomRef.current > 1) return Math.abs(gesture.dx) > 4 || Math.abs(gesture.dy) > 4;
       return Math.abs(gesture.dx) > 18 && Math.abs(gesture.dx) > Math.abs(gesture.dy);
     },
     onPanResponderGrant: (event) => {
       if (event.nativeEvent.touches.length >= 2) {
         pinchStartDistance.current = touchDistance(event.nativeEvent.touches);
         pinchStartZoom.current = zoomRef.current;
-        const nextOrigin = originFromTouches(event.nativeEvent.touches);
-        zoomOriginRef.current = nextOrigin;
-        setZoomOrigin(nextOrigin);
+        pinchStartMidpoint.current = midpointFromTouches(event.nativeEvent.touches);
+        pinchStartPan.current = panOffsetRef.current;
+        showZoomTarget(pinchStartMidpoint.current);
+      } else if (zoomRef.current > 1) {
+        dragStartPan.current = panOffsetRef.current;
+        showZoomTarget(pointFromTouch(event.nativeEvent.touches[0]));
       }
     },
-    onPanResponderMove: (event) => {
-      if (event.nativeEvent.touches.length < 2) return;
-      const distance = touchDistance(event.nativeEvent.touches);
-      if (!pinchStartDistance.current || !distance) return;
-      setPlanetZoom(pinchStartZoom.current * (distance / pinchStartDistance.current), originFromTouches(event.nativeEvent.touches));
+    onPanResponderMove: (event, gesture) => {
+      if (event.nativeEvent.touches.length >= 2) {
+        const distance = touchDistance(event.nativeEvent.touches);
+        if (!pinchStartDistance.current || !distance) return;
+        setPinchZoom(
+          pinchStartZoom.current * (distance / pinchStartDistance.current),
+          midpointFromTouches(event.nativeEvent.touches)
+        );
+        return;
+      }
+      if (pinchStartDistance.current) return;
+      if (zoomRef.current > 1) {
+        updatePlanetZoom(zoomRef.current, {
+          x: dragStartPan.current.x + gesture.dx,
+          y: dragStartPan.current.y + gesture.dy
+        });
+        showZoomTarget(pointFromTouch(event.nativeEvent.touches[0]));
+      }
     },
     onPanResponderRelease: (event, gesture) => {
       if (event.nativeEvent.touches.length >= 2 || pinchStartDistance.current) {
         pinchStartDistance.current = 0;
+        displayedZoomRef.current = zoomRef.current;
+        setZoom(zoomRef.current);
+        hideZoomTargetSoon();
+        return;
+      }
+      if (zoomRef.current > 1) {
+        displayedZoomRef.current = zoomRef.current;
+        setZoom(zoomRef.current);
+        hideZoomTargetSoon();
         return;
       }
       if (gesture.dx < -24) onRotate(1);
@@ -2178,29 +2280,58 @@ function PlanetIllustration({
     },
     onPanResponderTerminate: () => {
       pinchStartDistance.current = 0;
+      hideZoomTargetSoon();
     }
   })).current;
 
   return (
     <View
+      ref={stageRef}
       style={[styles.planetStage, { height: stageHeight }]}
       onLayout={(event) => {
         stageLayout.current = {
           width: event.nativeEvent.layout.width,
           height: event.nativeEvent.layout.height
         };
+        lastZoomTarget.current = {
+          x: event.nativeEvent.layout.width / 2,
+          y: event.nativeEvent.layout.height / 2
+        };
+        stageRef.current?.measureInWindow((x, y) => {
+          stagePageOrigin.current = { x, y };
+        });
       }}
       {...panResponder.panHandlers}
     >
       <BackgroundTwinkles />
-      {showBackground ? <Image source={v4BackgroundAsset} style={styles.v4UniverseBackground} resizeMode="cover" /> : null}
-      <View style={[styles.planetAssetWrap, { width: visualWidth, height: visualHeight, transform: planetTransform }]}> 
+      {showBackground ? <Image source={v4BackgroundAsset} style={styles.v4UniverseBackground} resizeMode="cover" fadeDuration={0} /> : null}
+      <Animated.View
+        style={[
+          styles.planetPanLayer,
+          {
+            width: visualWidth,
+            height: visualHeight,
+            transform: [{ translateX: panAnimated.x }, { translateY: panAnimated.y }]
+          }
+        ]}
+        onLayout={(event) => {
+          planetBaseCenter.current = {
+            x: event.nativeEvent.layout.x + event.nativeEvent.layout.width / 2,
+            y: event.nativeEvent.layout.y + event.nativeEvent.layout.height / 2
+          };
+        }}
+      >
+      <Animated.View
+        style={[styles.planetAssetWrap, { width: visualWidth, height: visualHeight, transform: [{ scale: zoomAnimated }] }]}
+        renderToHardwareTextureAndroid={zoom > 1 || zoomTargetVisible}
+        shouldRasterizeIOS={zoom > 1 || zoomTargetVisible}
+      >
         {v4Deco.filter((asset) => asset.layer === "background").map((asset) => (
-          <Image key={asset.key} source={asset.source} style={[styles.v4DecoImage, v4DecoFrame(asset, visualWidth, visualHeight), asset.rotation ? { transform: [{ rotate: `${asset.rotation}deg` }] } : null]} resizeMode="contain" />
+          <Image key={asset.key} source={asset.source} style={[styles.v4DecoImage, v4DecoFrame(asset, visualWidth, visualHeight), asset.rotation ? { transform: [{ rotate: `${asset.rotation}deg` }] } : null]} resizeMode="contain" fadeDuration={0} />
         ))}
-        <Image source={v4BarePlanetAsset} style={styles.planetAssetImage} resizeMode="contain" />
+        <Image source={v4BarePlanetAsset} style={styles.planetAssetImage} resizeMode="contain" fadeDuration={0} />
         {v4Deco.filter((asset) => asset.layer === "boundary").map((asset) => (
-          <Image key={asset.key} source={asset.source} style={[styles.v4DecoImage, v4DecoFrame(asset, visualWidth, visualHeight), asset.rotation ? { transform: [{ rotate: `${asset.rotation}deg` }] } : null]} resizeMode="contain" />
+          <Image key={asset.key} source={asset.source} style={[styles.v4DecoImage, v4DecoFrame(asset, visualWidth, visualHeight), asset.rotation ? { transform: [{ rotate: `${asset.rotation}deg` }] } : null]} resizeMode="contain" fadeDuration={0} />
         ))}
         <View style={styles.continentAxisLayer}>
           {v4LandLayers.sort((a, b) => a.level - b.level).map((layer) => {
@@ -2216,14 +2347,15 @@ function PlanetIllustration({
                   frame
                 ]}
                 resizeMode="contain"
+                fadeDuration={0}
               />
             );
           })}
           {v4Deco.filter((asset) => asset.layer === "foreground").map((asset) => (
-            <Image key={asset.key} source={asset.source} style={[styles.v4DecoImage, v4DecoFrame(asset, visualWidth, visualHeight), asset.rotation ? { transform: [{ rotate: `${asset.rotation}deg` }] } : null]} resizeMode="contain" />
+            <Image key={asset.key} source={asset.source} style={[styles.v4DecoImage, v4DecoFrame(asset, visualWidth, visualHeight), asset.rotation ? { transform: [{ rotate: `${asset.rotation}deg` }] } : null]} resizeMode="contain" fadeDuration={0} />
           ))}
           {v4MoodDeco.filter((asset) => asset.slot !== "etc_lake").map((asset) => (
-            <Image key={asset.key} source={asset.source} style={[styles.v4DecoImage, v4MoodDecoFrame(asset, visualWidth, visualHeight)]} resizeMode="contain" />
+            <Image key={asset.key} source={asset.source} style={[styles.v4DecoImage, v4MoodDecoFrame(asset, visualWidth, visualHeight)]} resizeMode="contain" fadeDuration={0} />
           ))}
           {v4EtcLayers.sort((a, b) => a.level - b.level).map((layer) => {
             const asset = v4AssetFor(layer.category, layer.level, layer.side);
@@ -2234,11 +2366,12 @@ function PlanetIllustration({
                 source={asset.source}
                 style={[styles.continentLayerImage, v4LayerFrame(layer.slot, layer.placement, asset, layer.level, visualWidth, visualHeight)]}
                 resizeMode="contain"
+                fadeDuration={0}
               />
             );
           })}
           {v4MoodDeco.filter((asset) => asset.slot === "etc_lake").map((asset) => (
-            <Image key={asset.key} source={asset.source} style={[styles.v4DecoImage, v4MoodDecoFrame(asset, visualWidth, visualHeight)]} resizeMode="contain" />
+            <Image key={asset.key} source={asset.source} style={[styles.v4DecoImage, v4MoodDecoFrame(asset, visualWidth, visualHeight)]} resizeMode="contain" fadeDuration={0} />
           ))}
           {enableContinentHits ? visible.slice(0, 6).map((continent, index) => (
             <Pressable
@@ -2271,13 +2404,27 @@ function PlanetIllustration({
         <SteamPuffs style={styles.steamVentLower} delay={820} small />
         <SteamPuffs style={styles.steamVentOuterUpperLeft} delay={360} outward />
         <SteamPuffs style={styles.steamVentOuterUpperRight} delay={1180} outwardRight />
-      </View>
+      </Animated.View>
+      </Animated.View>
+      {zoomTargetVisible ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.zoomTarget, { transform: zoomTargetAnimated.getTranslateTransform() }]}
+        >
+          <View style={styles.zoomTargetRing} />
+          <View style={styles.zoomTargetHorizontal} />
+          <View style={styles.zoomTargetVertical} />
+          <Text style={styles.zoomTargetValue}>{Math.round(zoom * 100)}%</Text>
+        </Animated.View>
+      ) : null}
       {showZoomControls ? <View style={[styles.zoomControls, { bottom: 12 + zoomBottomInset }]}>
-        <Pressable style={[styles.zoomButton, zoom <= 1 && styles.zoomButtonDisabled]} onPress={() => setPlanetZoom(zoomRef.current - 0.25)}>
+        <Pressable style={[styles.zoomButton, zoom <= 1 && styles.zoomButtonDisabled]} onPress={() => zoomAroundPoint(zoomRef.current - 0.25)} disabled={zoom <= 1}>
           <Text style={styles.zoomButtonText}>−</Text>
         </Pressable>
-        <Text style={styles.zoomValue}>{Math.round(zoom * 100)}%</Text>
-        <Pressable style={[styles.zoomButton, zoom >= 2 && styles.zoomButtonDisabled]} onPress={() => setPlanetZoom(zoomRef.current + 0.25)}>
+        <Pressable style={styles.zoomValueButton} onPress={resetPlanetZoom} accessibilityLabel="행성 확대 초기화">
+          <Text style={styles.zoomValue}>확대 {Math.round(zoom * 100)}%</Text>
+        </Pressable>
+        <Pressable style={[styles.zoomButton, zoom >= 2 && styles.zoomButtonDisabled]} onPress={() => zoomAroundPoint(zoomRef.current + 0.25)} disabled={zoom >= 2}>
           <Text style={styles.zoomButtonText}>＋</Text>
         </Pressable>
       </View> : null}
@@ -3487,6 +3634,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center"
   },
+  planetPanLayer: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center"
+  },
   planetAssetImage: {
     width: "100%",
     height: "100%"
@@ -4039,6 +4191,49 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.18)",
     backgroundColor: "rgba(7, 13, 42, 0.58)"
   },
+  zoomTarget: {
+    position: "absolute",
+    zIndex: 11,
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  zoomTargetRing: {
+    position: "absolute",
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: "rgba(191, 224, 255, 0.96)",
+    backgroundColor: "rgba(7, 13, 42, 0.18)"
+  },
+  zoomTargetHorizontal: {
+    position: "absolute",
+    width: 38,
+    height: 1.5,
+    backgroundColor: "rgba(191, 224, 255, 0.88)"
+  },
+  zoomTargetVertical: {
+    position: "absolute",
+    width: 1.5,
+    height: 38,
+    backgroundColor: "rgba(191, 224, 255, 0.88)"
+  },
+  zoomTargetValue: {
+    position: "absolute",
+    top: 42,
+    minWidth: 48,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+    overflow: "hidden",
+    color: "#07102e",
+    fontSize: 10,
+    fontWeight: "900",
+    textAlign: "center",
+    backgroundColor: "rgba(191, 224, 255, 0.96)"
+  },
   zoomButton: {
     alignItems: "center",
     justifyContent: "center",
@@ -4057,11 +4252,16 @@ const styles = StyleSheet.create({
     fontWeight: "900"
   },
   zoomValue: {
-    minWidth: 44,
     color: "rgba(238,242,255,0.86)",
     fontSize: 11,
     fontWeight: "900",
     textAlign: "center"
+  },
+  zoomValueButton: {
+    minWidth: 68,
+    minHeight: 28,
+    alignItems: "center",
+    justifyContent: "center"
   },
   rotationControls: {
     zIndex: 6,
