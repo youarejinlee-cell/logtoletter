@@ -2,31 +2,19 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { NotificationSettings } from "../types/domain";
+import { createNotificationPromptSelector } from "./notificationPrompts";
 
 const NOTIFICATION_IDS_KEY = "log-to-letter-notification-ids-v1";
+const NOTIFICATION_SCHEDULE_KEY = "log-to-letter-notification-schedule-v2";
 const MAX_DAILY_NOTIFICATIONS = 12;
 const MAX_FIXED_TIMES = 5;
 const MIN_INTERVAL_MINUTES = 10;
 const MAX_INTERVAL_MINUTES = 120;
 const INTERVAL_STEP_MINUTES = 5;
 const ANDROID_NOTIFICATION_CHANNEL_ID = "log-reminders";
-const LOG_NOTIFICATION_PROMPT_VERSION = "record-prompt-v1";
-const MONTHLY_PLANET_PROMPT_VERSION = "monthly-planet-v1";
-
-const LOG_NOTIFICATION_PROMPTS = [
-  { id: "thought_now", body: "지금 무슨 생각하고 있어?" },
-  { id: "quick_thought", body: "방금 딱 생각하고 있었던 거, 짧게 기록해봐!" },
-  { id: "fill_planet", body: "이번에는 어떤 기록으로 행성을 채워볼까?" },
-  { id: "emotion_curiosity", body: "나는 어떤 감정을 가장 많이 느낄까 궁금하지 않아?" },
-  { id: "today_joy", body: "오늘 나를 즐겁게 했던 게 있다면 기록으로 남겨봐." },
-  { id: "future_self", body: "나중의 내가 알았으면 하는 지금 나의 생각이 있다면 기록해봐." },
-  { id: "fun_story", body: "재밌는 일 있으면 얘기 좀..." },
-  { id: "planet_knows", body: "행성은 답을 알고 있다(진지)" },
-  { id: "hard_to_say", body: "입 밖으로 내기 어려운 이야기가 있다면... 여기 나의 행성이 있어!" },
-  { id: "earth_turns", body: "기록하지 않아도 지구는 돈다!" },
-  { id: "anything_new", body: "별일 없지...?(아련)" },
-  { id: "knock_knock", body: "똑똑, 기록할 시간이에요~" }
-] as const;
+const LOG_NOTIFICATION_PROMPT_VERSION = "record-prompt-v2";
+const MONTHLY_PLANET_PROMPT_VERSION = "monthly-planet-v2";
+const MONTH_END_SETTINGS_PROMPT_VERSION = "month-end-settings-v1";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -123,8 +111,64 @@ function getFixedSchedule(settings: NotificationSettings) {
   return weekdays.flatMap((weekday) => times.map((minuteOfDay) => ({ weekday, minuteOfDay })));
 }
 
+function getNextMonthEndNotificationDate(now = new Date()) {
+  let notificationDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 13, 9, 0, 0);
+  if (notificationDate.getTime() <= now.getTime()) {
+    notificationDate = new Date(now.getFullYear(), now.getMonth() + 2, 0, 13, 9, 0, 0);
+  }
+  return notificationDate;
+}
+
 async function saveScheduledIds(ids: string[]) {
   await AsyncStorage.setItem(NOTIFICATION_IDS_KEY, JSON.stringify(ids));
+}
+
+type StoredNotificationSchedule = {
+  ids: string[];
+  reminderCount: number;
+  signature: string;
+};
+
+function getNotificationScheduleSignature(settings: NotificationSettings) {
+  return JSON.stringify({
+    enabled: settings.enabled,
+    scheduleMode: settings.scheduleMode,
+    startTime: settings.startTime,
+    endTime: settings.endTime,
+    intervalMinutes: normalizeIntervalMinutes(settings.intervalMinutes),
+    weekdays: [...(settings.weekdays || [])].sort((left, right) => left - right),
+    fixedTimes: settings.fixedTimes || [],
+    randomStartTime: settings.randomStartTime,
+    randomEndTime: settings.randomEndTime,
+    randomDailyCount: settings.randomDailyCount,
+    promptVersion: LOG_NOTIFICATION_PROMPT_VERSION,
+    monthlyPromptVersion: MONTHLY_PLANET_PROMPT_VERSION,
+    monthEndPromptVersion: MONTH_END_SETTINGS_PROMPT_VERSION
+  });
+}
+
+async function saveStoredSchedule(schedule: StoredNotificationSchedule | null) {
+  if (!schedule) {
+    await AsyncStorage.removeItem(NOTIFICATION_SCHEDULE_KEY);
+    return;
+  }
+  await AsyncStorage.setItem(NOTIFICATION_SCHEDULE_KEY, JSON.stringify(schedule));
+}
+
+async function getStoredSchedule(): Promise<StoredNotificationSchedule | null> {
+  const raw = await AsyncStorage.getItem(NOTIFICATION_SCHEDULE_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<StoredNotificationSchedule>;
+    if (!Array.isArray(parsed.ids) || typeof parsed.signature !== "string") return null;
+    return {
+      ids: parsed.ids.filter((id): id is string => typeof id === "string"),
+      reminderCount: Number(parsed.reminderCount) || 0,
+      signature: parsed.signature
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function getScheduledIds() {
@@ -138,9 +182,11 @@ async function getScheduledIds() {
 }
 
 export async function cancelLogNotifications() {
-  const ids = await getScheduledIds();
+  const storedSchedule = await getStoredSchedule();
+  const ids = Array.from(new Set([...(storedSchedule?.ids || []), ...await getScheduledIds()]));
   await Promise.all(ids.map((id) => Notifications.cancelScheduledNotificationAsync(id)));
   await saveScheduledIds([]);
+  await saveStoredSchedule(null);
 }
 
 export async function getNotificationPermissionStatus() {
@@ -149,8 +195,34 @@ export async function getNotificationPermissionStatus() {
 }
 
 export async function getScheduledLogNotificationCount() {
-  const ids = await getScheduledIds();
-  return ids.length;
+  const storedSchedule = await getStoredSchedule();
+  const ids = new Set(storedSchedule?.ids || await getScheduledIds());
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  return scheduled.filter((notification) => ids.has(notification.identifier)).length;
+}
+
+export async function ensureLogNotifications(settings: NotificationSettings) {
+  if (!settings.enabled) {
+    await cancelLogNotifications();
+    return { status: "꺼짐", count: 0 };
+  }
+
+  const permission = await Notifications.getPermissionsAsync();
+  if (!permission.granted) {
+    return { status: permission.canAskAgain ? "권한 필요" : "권한 차단됨", count: 0 };
+  }
+
+  const storedSchedule = await getStoredSchedule();
+  const signature = getNotificationScheduleSignature(settings);
+  if (storedSchedule?.signature === signature && storedSchedule.ids.length > 0) {
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    const scheduledIds = new Set(scheduled.map((notification) => notification.identifier));
+    if (storedSchedule.ids.every((id) => scheduledIds.has(id))) {
+      return { status: "예약 유지됨", count: storedSchedule.reminderCount };
+    }
+  }
+
+  return scheduleLogNotifications(settings);
 }
 
 async function ensureAndroidNotificationChannel() {
@@ -195,18 +267,17 @@ export async function scheduleLogNotifications(settings: NotificationSettings) {
     return { status: permission.canAskAgain ? "권한 필요" : "권한 차단됨", count: 0 };
   }
 
-  const promptOffset = Math.floor(Math.random() * LOG_NOTIFICATION_PROMPTS.length);
-  const promptAt = (index: number) => LOG_NOTIFICATION_PROMPTS[(promptOffset + index) % LOG_NOTIFICATION_PROMPTS.length];
+  const promptAt = createNotificationPromptSelector();
   const weeklySchedule = settings.scheduleMode === "fixed"
     ? getFixedSchedule(settings)
     : settings.scheduleMode === "random"
       ? getRandomSchedule(settings)
       : null;
   const reminderIds = weeklySchedule
-    ? await Promise.all(weeklySchedule.map(({ weekday, minuteOfDay }, index) => {
+    ? await Promise.all(weeklySchedule.map(({ weekday, minuteOfDay }) => {
       const hour = Math.floor(minuteOfDay / 60);
       const minute = minuteOfDay % 60;
-      const prompt = promptAt(index);
+      const prompt = promptAt(minuteOfDay);
       return Notifications.scheduleNotificationAsync({
         content: {
           title: "Log Planet",
@@ -226,10 +297,10 @@ export async function scheduleLogNotifications(settings: NotificationSettings) {
         }
       });
     }))
-    : await Promise.all(getScheduleMinutes(settings).map((minuteOfDay, index) => {
+    : await Promise.all(getScheduleMinutes(settings).map((minuteOfDay) => {
       const hour = Math.floor(minuteOfDay / 60);
       const minute = minuteOfDay % 60;
-      const prompt = promptAt(index);
+      const prompt = promptAt(minuteOfDay);
       return Notifications.scheduleNotificationAsync({
         content: {
           title: "Log Planet",
@@ -263,12 +334,35 @@ export async function scheduleLogNotifications(settings: NotificationSettings) {
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.MONTHLY,
       day: 1,
-      hour: 8,
-      minute: 24,
+      hour: 13,
+      minute: 9,
       channelId: Platform.OS === "android" ? ANDROID_NOTIFICATION_CHANNEL_ID : undefined
     }
   });
 
-  await saveScheduledIds([...reminderIds, monthlyPlanetId]);
+  const monthEndSettingsId = await Notifications.scheduleNotificationAsync({
+    content: {
+      title: "Log Planet",
+      body: "내일부터 이어질 한달의 기록을 어떤 패턴으로 남길지, 알림 설정을 점검해봐.",
+      data: {
+        screen: "settings",
+        promptId: "month_end_notification_settings",
+        promptVersion: MONTH_END_SETTINGS_PROMPT_VERSION
+      }
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: getNextMonthEndNotificationDate(),
+      channelId: Platform.OS === "android" ? ANDROID_NOTIFICATION_CHANNEL_ID : undefined
+    }
+  });
+
+  const ids = [...reminderIds, monthlyPlanetId, monthEndSettingsId];
+  await saveScheduledIds(ids);
+  await saveStoredSchedule({
+    ids,
+    reminderCount: reminderIds.length,
+    signature: getNotificationScheduleSignature(settings)
+  });
   return { status: "예약됨", count: reminderIds.length };
 }

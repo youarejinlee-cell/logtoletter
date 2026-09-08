@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Alert, ImageBackground, Linking, Modal, Platform, Pressable, StatusBar as NativeStatusBar, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Linking, Modal, Platform, Pressable, StatusBar as NativeStatusBar, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import * as Notifications from "expo-notifications";
 import * as SplashScreen from "expo-splash-screen";
@@ -26,6 +26,7 @@ import { createId, isUuid } from "./src/lib/ids";
 import { buildWeeklyLetter } from "./src/lib/letter";
 import {
   cancelLogNotifications,
+  ensureLogNotifications,
   getNotificationPermissionStatus,
   getScheduledLogNotificationCount,
   scheduleLogNotifications,
@@ -56,7 +57,7 @@ const topSafePadding = Platform.select({
 
 const LETTER_ARCHIVE_ENABLED = false;
 const GUEST_LOGIN_PROMPT_DELAY_MS = 20_000;
-const launchBackground = require("./assets/assets_v4/continent/background.png");
+const launchScreen = require("./assets/assets_v4/launch/log_planet_launch.png");
 
 const tabHeaderMeta: Record<TabKey, { eyebrow: string; title: string; lead: string }> = {
   universe: { eyebrow: "PLANET", title: "행성", lead: "기록이 쌓이면 나만의 행성이 돼." },
@@ -505,6 +506,8 @@ export default function App() {
         const monthOffset = typeof data.monthOffset === "number" ? data.monthOffset : -1;
         setUniverseMonthFocusRequest({ monthKey: monthKeyWithOffset(monthOffset), requestId: Date.now() });
         setTab("universe");
+      } else if (data?.screen === "settings") {
+        setTab("settings");
       } else {
         return;
       }
@@ -1005,14 +1008,16 @@ export default function App() {
       });
   };
 
-  const applyNotificationSettings = async (settings: AppState["settings"]) => {
+  const applyNotificationSettings = async (settings: AppState["settings"], preserveExisting = false) => {
     try {
       if (!settings.enabled) {
         await cancelLogNotifications();
         setNotificationStatus("꺼짐");
         return { status: "꺼짐", count: 0 };
       }
-      const result = await scheduleLogNotifications(settings);
+      const result = preserveExisting
+        ? await ensureLogNotifications(settings)
+        : await scheduleLogNotifications(settings);
       const countLabel = settings.scheduleMode === "fixed"
         ? `일주일 ${result.count}번의 기록을 할 수 있어`
         : settings.scheduleMode === "random"
@@ -1058,7 +1063,7 @@ export default function App() {
 
   useEffect(() => {
     if (!hydrated) return;
-    applyNotificationSettings(state.settings);
+    applyNotificationSettings(state.settings, true);
   }, [hydrated]);
 
   const content = {
@@ -1328,18 +1333,16 @@ export default function App() {
           </Pressable>
         </Modal>
         {launchScreenVisible ? (
-          <ImageBackground
-            source={launchBackground}
-            resizeMode="cover"
-            style={styles.launchScreen}
-            accessibilityLabel="Log Planet 시작 화면"
-          >
+          <View style={styles.launchScreen}>
             <StatusBar hidden />
-            <View style={styles.launchCopy}>
-              <Text style={styles.launchTitle}>Log Planet</Text>
-              <Text style={styles.launchSubtitle}>기록으로 완성되는 나만의 행성</Text>
-            </View>
-          </ImageBackground>
+            <Image
+              source={launchScreen}
+              resizeMode="cover"
+              style={styles.launchImage}
+              accessibilityRole="image"
+              accessibilityLabel="Log Planet 시작 화면"
+            />
+          </View>
         ) : null}
         </View>
       </AppThemeProvider>
@@ -1351,28 +1354,11 @@ const styles = StyleSheet.create({
   launchScreen: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 1000,
-    alignItems: "center",
-    justifyContent: "center",
     backgroundColor: "#070d2a"
   },
-  launchCopy: {
-    alignItems: "center",
-    paddingHorizontal: 24
-  },
-  launchTitle: {
-    color: "#ffffff",
-    fontSize: 36,
-    lineHeight: 44,
-    fontWeight: "900",
-    textAlign: "center"
-  },
-  launchSubtitle: {
-    marginTop: 10,
-    color: "#d8ebff",
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: "700",
-    textAlign: "center"
+  launchImage: {
+    width: "100%",
+    height: "100%"
   },
   safe: {
     flex: 1,

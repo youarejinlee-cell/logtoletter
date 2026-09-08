@@ -29,19 +29,19 @@ const tasteLv2Placements = {
 };
 const finalAdjustments = {
   work: {
-    land_01: { 3: { scale: .95 }, 4: { x: -25 } }, land_03: { 3: { x: 50, scale: .9 }, 4: { x: 50 } },
-    land_04: { 2: { y: -25, scale: .95 } }, land_05: { 2: { x: 25, scale: .95 }, 3: { x: 25, scale: .81 }, 4: { x: 50 } },
+    land_01: { 3: { scale: .95 }, 4: { x: -25 } }, land_03: { 2: { x: 25, y: -25 }, 3: { x: 50, scale: .9 }, 4: { x: 50 } },
+    land_04: { 1: { scale: .8 }, 2: { y: -25, scale: .76 }, 3: { x: -25, scale: .8 }, 4: { scale: .8 } }, land_05: { 2: { x: 25, scale: .95 }, 3: { x: 25, scale: .81 }, 4: { x: 50 } },
     land_06: { 1: { y: -25, scale: 1.1 }, 2: { x: 50, y: -25 }, 3: { x: 25, scale: .9 }, 4: { x: 65 } }
   },
   taste: {
     land_02: { 4: { x: -50, scale: .9 } }, land_03: { 2: { scale: 1.05 }, 3: { x: 25, y: -25 }, 4: { x: 25 } },
-    land_04: { 2: { x: 25, y: -25, scale: .95 }, 3: { x: 30 } }, land_05: { 1: { y: -25 }, 2: { x: 30 }, 3: { x: 75 }, 4: { x: 50 } },
+    land_04: { 1: { scale: .8 }, 2: { x: 25, y: -25, scale: .76 }, 3: { x: 5, scale: .8 }, 4: { scale: .8 } }, land_05: { 1: { y: -25 }, 2: { x: 30 }, 3: { x: 75 }, 4: { x: 50 } },
     land_06: { 1: { y: -25 }, 2: { y: -30 }, 3: { x: 35, y: -40 }, 4: { x: 50, y: -25 } }
   },
   relationship: {
     land_01: { 2: { scale: .95 }, 4: { x: -25, scale: 1.1 } },
     land_02: { 1: { y: 25 }, 2: { x: -50, y: 25 }, 3: { x: -15 }, 4: { x: -50 } },
-    land_03: { 2: { y: -25, scale: 1.05 }, 3: { x: 25 }, 4: { x: 25 } },
+    land_03: { 2: { x: 25, y: -25, scale: 1.26 }, 3: { x: 50, scale: 1.2 }, 4: { x: 25 } },
     land_04: { 2: { x: 25 }, 3: { x: -25 }, 4: { scale: .8 } },
     land_05: { 2: { y: -25, scale: 1.05 }, 3: { x: 165, scale: 1.1 }, 4: { x: 50 } },
     land_06: { 1: { x: 10 }, 2: { x: 50 }, 3: { x: 50, y: -25 }, 4: { x: 75, y: -15 } }
@@ -49,17 +49,17 @@ const finalAdjustments = {
   "self-discipline": {
     land_01: { 1: { x: -50, y: -50 }, 2: { x: -50, scale: .95 }, 4: { x: -25, y: -25 } },
     land_02: { 2: { scale: .9 }, 4: { x: -50, scale: .9 } }, land_03: { 1: { y: -25 }, 3: { x: 25 }, 4: { x: 50, scale: .9 } },
-    land_04: { 2: { scale: .95 }, 4: { scale: .95 } }, land_05: { 1: { y: -25 }, 2: { x: 50, y: -25, scale: .95 }, 3: { x: 55 }, 4: { x: 50 } },
+    land_04: { 1: { scale: .8 }, 2: { scale: .76 }, 3: { x: -25, scale: .8 }, 4: { scale: .76 } }, land_05: { 1: { y: -25 }, 2: { x: 50, y: -25, scale: .95 }, 3: { x: 55 }, 4: { x: 50 } },
     land_06: { 1: { y: -35 }, 2: { x: 25 }, 3: { x: 40, y: -35 }, 4: { x: 60, y: -10 } }
   },
   wealth: {
     land_01: { 2: { y: 50, scale: .9 }, 4: { x: -25 } }, land_02: { 2: { scale: .85 }, 4: { x: -70 } },
-    land_03: { 1: { y: 25 }, 2: { y: -25, scale: .95 }, 3: { x: 25 }, 4: { x: 25, y: -25 } }, land_04: { 2: { scale: .95 } },
+    land_03: { 1: { y: 25 }, 2: { y: -25, scale: .95 }, 3: { x: 25 }, 4: { x: 25, y: -25 } }, land_04: { 1: { scale: .8 }, 2: { scale: .76 }, 3: { x: -25, scale: .8 }, 4: { scale: .8 } },
     land_05: { 2: { x: 25, scale: .855 }, 3: { x: 50, scale: 1.05 }, 4: { x: 50, scale: .9 } }, land_06: { 2: { x: 100 }, 3: { x: -25 }, 4: { x: 50, y: 20 } }
   },
   health: {
     land_01: { 1: { y: -25 } }, land_02: { 3: { y: -25, scale: .9 }, 4: { x: -50, scale: .9 } },
-    land_03: { 2: { y: -25 }, 3: { x: 25 }, 4: { x: 25 } }, land_04: { 2: { y: -25 }, 4: { scale: .76 } },
+    land_03: { 2: { y: -25 }, 3: { x: 25 }, 4: { x: 25 } }, land_04: { 1: { scale: .8 }, 2: { y: -25, scale: .8 }, 3: { x: -25, scale: .8 }, 4: { scale: .608 } },
     land_05: { 1: { x: 50, y: -25 }, 2: { x: 25, y: -25 }, 3: { x: 75 }, 4: { x: 25, scale: .855 } },
     land_06: { 1: { x: 25 }, 2: { x: 25 }, 3: { x: 25 }, 4: { x: 55, y: 25, scale: .9 } }
   }
@@ -185,6 +185,15 @@ function renderSlot(base, category, slot) {
       return [level, ratio * scale * scale];
     }))
   };
+  if (slot.key === "land_03") {
+    categorySlot = {
+      ...categorySlot,
+      centers: {
+        ...categorySlot.centers,
+        2: { ...categorySlot.centers[2], x: categorySlot.centers[2].x - 35 }
+      }
+    };
+  }
   for (const level of [1, 2, 3, 4]) {
     const asset = assetFor(category, level, categorySlot.sides[level]);
     const image = readPng(path.join(assetDir, asset.file));

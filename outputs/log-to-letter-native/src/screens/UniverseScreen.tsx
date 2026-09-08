@@ -624,7 +624,7 @@ const v4Slots: Record<V4SlotKey, V4SlotSpec> = {
     levelCenters: { 1: { x: 625, y: 640 }, 2: { x: 585, y: 730 }, 3: { x: 685, y: 815 }, 4: { x: 725, y: 880 } },
     lv1Side: "center",
     assetSide: "center",
-    areaRatio: { 1: 0.1083, 2: 0.0467856, 3: 0.03779136, 4: 0.0241864704 }
+    areaRatio: { 1: 0.1083, 2: 0.0467856, 3: 0.03779136, 4: 0.015479341056 }
   }
 };
 
@@ -850,22 +850,22 @@ function adjustV4Placements(
 const finalV4PlacementAdjustments: Record<Exclude<V4Category, "etc">, V4PlacementAdjustments> = {
   work: {
     land_01: { 3: { scale: 0.95 }, 4: { x: -25 } },
-    land_03: { 3: { x: 50, scale: 0.9 }, 4: { x: 50 } },
-    land_04: { 2: { y: -25, scale: 0.95 } },
+    land_03: { 2: { x: 25, y: -25 }, 3: { x: 50, scale: 0.9 }, 4: { x: 50 } },
+    land_04: { 1: { scale: 0.8 }, 2: { y: -25, scale: 0.76 }, 3: { x: -25, scale: 0.8 }, 4: { scale: 0.8 } },
     land_05: { 2: { x: 25, scale: 0.95 }, 3: { x: 25, scale: 0.81 }, 4: { x: 50 } },
     land_06: { 1: { y: -25, scale: 1.1 }, 2: { x: 50, y: -25 }, 3: { x: 25, scale: 0.9 }, 4: { x: 65 } }
   },
   taste: {
     land_02: { 4: { x: -50, scale: 0.9 } },
     land_03: { 2: { scale: 1.05 }, 3: { x: 25, y: -25 }, 4: { x: 25 } },
-    land_04: { 2: { x: 25, y: -25, scale: 0.95 }, 3: { x: 30 } },
+    land_04: { 1: { scale: 0.8 }, 2: { x: 25, y: -25, scale: 0.76 }, 3: { x: 5, scale: 0.8 }, 4: { scale: 0.8 } },
     land_05: { 1: { y: -25 }, 2: { x: 30 }, 3: { x: 75 }, 4: { x: 50 } },
     land_06: { 1: { y: -25 }, 2: { y: -30 }, 3: { x: 35, y: -40 }, 4: { x: 50, y: -25 } }
   },
   relationship: {
     land_01: { 2: { scale: 0.95 }, 4: { x: -25, scale: 1.1 } },
     land_02: { 1: { y: 25 }, 2: { x: -50, y: 25 }, 3: { x: -15 }, 4: { x: -50 } },
-    land_03: { 2: { y: -25, scale: 1.05 }, 3: { x: 25 }, 4: { x: 25 } },
+    land_03: { 2: { x: 25, y: -25, scale: 1.26 }, 3: { x: 50, scale: 1.2 }, 4: { x: 25 } },
     land_04: { 2: { x: 25 }, 3: { x: -25 }, 4: { scale: 0.8 } },
     land_05: { 2: { y: -25, scale: 1.05 }, 3: { x: 165, scale: 1.1 }, 4: { x: 50 } },
     land_06: { 1: { x: 10 }, 2: { x: 50 }, 3: { x: 50, y: -25 }, 4: { x: 75, y: -15 } }
@@ -874,7 +874,7 @@ const finalV4PlacementAdjustments: Record<Exclude<V4Category, "etc">, V4Placemen
     land_01: { 1: { x: -50, y: -50 }, 2: { x: -50, scale: 0.95 }, 4: { x: -25, y: -25 } },
     land_02: { 2: { scale: 0.9 }, 4: { x: -50, scale: 0.9 } },
     land_03: { 1: { y: -25 }, 3: { x: 25 }, 4: { x: 50, scale: 0.9 } },
-    land_04: { 2: { scale: 0.95 }, 4: { scale: 0.95 } },
+    land_04: { 1: { scale: 0.8 }, 2: { scale: 0.76 }, 3: { x: -25, scale: 0.8 }, 4: { scale: 0.76 } },
     land_05: { 1: { y: -25 }, 2: { x: 50, y: -25, scale: 0.95 }, 3: { x: 55 }, 4: { x: 50 } },
     land_06: { 1: { y: -35 }, 2: { x: 25 }, 3: { x: 40, y: -35 }, 4: { x: 60, y: -10 } }
   },
@@ -882,7 +882,7 @@ const finalV4PlacementAdjustments: Record<Exclude<V4Category, "etc">, V4Placemen
     land_01: { 2: { y: 50, scale: 0.9 }, 4: { x: -25 } },
     land_02: { 2: { scale: 0.85 }, 4: { x: -70 } },
     land_03: { 1: { y: 25 }, 2: { y: -25, scale: 0.95 }, 3: { x: 25 }, 4: { x: 25, y: -25 } },
-    land_04: { 2: { scale: 0.95 } },
+    land_04: { 1: { scale: 0.8 }, 2: { scale: 0.76 }, 3: { x: -25, scale: 0.8 }, 4: { scale: 0.8 } },
     land_05: { 2: { x: 25, scale: 0.855 }, 3: { x: 50, scale: 1.05 }, 4: { x: 50, scale: 0.9 } },
     land_06: { 2: { x: 100 }, 3: { x: -25 }, 4: { x: 50, y: 20 } }
   },
@@ -890,7 +890,7 @@ const finalV4PlacementAdjustments: Record<Exclude<V4Category, "etc">, V4Placemen
     land_01: { 1: { y: -25 } },
     land_02: { 3: { y: -25, scale: 0.9 }, 4: { x: -50, scale: 0.9 } },
     land_03: { 2: { y: -25 }, 3: { x: 25 }, 4: { x: 25 } },
-    land_04: { 2: { y: -25 }, 4: { scale: 0.76 } },
+    land_04: { 1: { scale: 0.8 }, 2: { y: -25, scale: 0.8 }, 3: { x: -25, scale: 0.8 }, 4: { scale: 0.608 } },
     land_05: { 1: { x: 50, y: -25 }, 2: { x: 25, y: -25 }, 3: { x: 75 }, 4: { x: 25, scale: 0.855 } },
     land_06: { 1: { x: 25 }, 2: { x: 25 }, 3: { x: 25 }, 4: { x: 55, y: 25, scale: 0.9 } }
   }
