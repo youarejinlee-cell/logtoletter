@@ -10,6 +10,7 @@ import { GoogleLoginButton, KakaoLoginButton } from "./src/components/KakaoLogin
 import { AuthCard } from "./src/components/AuthCard";
 import { BottomTabs, TabKey } from "./src/components/BottomTabs";
 import { FirstRunGuideModal } from "./src/components/FirstRunGuideModal";
+import { FirstEntryNotificationPromptModal } from "./src/components/FirstEntryNotificationPromptModal";
 import { GuideCoachmark, interactiveGuideSteps } from "./src/components/GuideCoachmark";
 import { GuestLoginPromptModal } from "./src/components/GuestLoginPromptModal";
 import { AccountScreen } from "./src/screens/AccountScreen";
@@ -33,7 +34,7 @@ import {
   scheduleTestLogNotification
 } from "./src/lib/notifications";
 import { deleteRemoteEntries, deleteRemoteUserData, generateDueLetters, normalizeStateIds, pullAppState, syncAppState, upsertEntry, upsertRemoteSettings } from "./src/lib/remoteSync";
-import { claimGuestStorageNotice, completeFirstRunGuide, defaultState, hasCompletedFirstRunGuide, loadAppState, removeAppState, saveAppState } from "./src/lib/storage";
+import { claimFirstEntryNotificationPrompt, claimGuestStorageNotice, completeFirstRunGuide, defaultState, hasCompletedFirstRunGuide, loadAppState, removeAppState, saveAppState } from "./src/lib/storage";
 import {
   completeOAuthSessionFromInitialUrl,
   completeOAuthSessionFromUrl,
@@ -57,6 +58,7 @@ const topSafePadding = Platform.select({
 
 const LETTER_ARCHIVE_ENABLED = false;
 const GUEST_LOGIN_PROMPT_DELAY_MS = 20_000;
+const FIRST_ENTRY_NOTIFICATION_PROMPT_DELAY_MS = 3_000;
 const launchScreen = require("./assets/assets_v4/launch/log_planet_launch.png");
 
 const tabHeaderMeta: Record<TabKey, { eyebrow: string; title: string; lead: string }> = {
@@ -483,6 +485,7 @@ export default function App() {
   const [authChoiceVisible, setAuthChoiceVisible] = useState(false);
   const [guestBrowsePromptVisible, setGuestBrowsePromptVisible] = useState(false);
   const [firstRunGuideVisible, setFirstRunGuideVisible] = useState(false);
+  const [firstEntryNotificationPromptVisible, setFirstEntryNotificationPromptVisible] = useState(false);
   const [guideStep, setGuideStep] = useState<number | null>(null);
   const [firstRunGuideResolved, setFirstRunGuideResolved] = useState(false);
   const [launchScreenVisible, setLaunchScreenVisible] = useState(true);
@@ -492,6 +495,8 @@ export default function App() {
   const loginInProgressRef = useRef(false);
   const guestStorageNoticeRef = useRef(false);
   const guestBrowsePromptShownRef = useRef(false);
+  const firstEntryNotificationPromptClaimedRef = useRef(false);
+  const firstEntryNotificationPromptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const letters = state.letters;
   const theme = cosmicTheme;
   const activeTab = (!canUseDevTools && tab === "dev") || (!LETTER_ARCHIVE_ENABLED && tab === "inbox") ? "universe" : tab;
@@ -651,6 +656,7 @@ export default function App() {
       || guestBrowsePromptShownRef.current
       || authChoiceVisible
       || authLoading
+      || firstEntryNotificationPromptVisible
     ) return;
 
     const timer = setTimeout(() => {
@@ -658,7 +664,13 @@ export default function App() {
       setGuestBrowsePromptVisible(true);
     }, GUEST_LOGIN_PROMPT_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [authChoiceVisible, authLoading, guestBrowseTimerReady, hydrated, storageUserId, user]);
+  }, [authChoiceVisible, authLoading, firstEntryNotificationPromptVisible, guestBrowseTimerReady, hydrated, storageUserId, user]);
+
+  useEffect(() => () => {
+    if (firstEntryNotificationPromptTimerRef.current) {
+      clearTimeout(firstEntryNotificationPromptTimerRef.current);
+    }
+  }, []);
 
   const finishFirstRunGuide = () => {
     setFirstRunGuideVisible(false);
@@ -719,6 +731,7 @@ export default function App() {
   }, [hydrated, storageUserId, user?.id]);
 
   const addEntry = (entry: Entry) => {
+    const isFirstEntry = state.entries.length === 0;
     const normalized = { ...entry, id: isUuid(entry.id) ? entry.id : createId() };
     setCalendarFocusDate(dateKey(entry.createdAt));
     setState((current) => reconcileLetters({
@@ -754,6 +767,23 @@ export default function App() {
         });
     }
     setTab("calendar");
+
+    if (isFirstEntry && !state.settings.enabled && !firstEntryNotificationPromptClaimedRef.current) {
+      firstEntryNotificationPromptClaimedRef.current = true;
+      void claimFirstEntryNotificationPrompt()
+        .then((shouldShow) => {
+          if (!shouldShow) return;
+          firstEntryNotificationPromptTimerRef.current = setTimeout(() => {
+            setGuestBrowsePromptVisible(false);
+            setMenuOpen(false);
+            setFirstEntryNotificationPromptVisible(true);
+            firstEntryNotificationPromptTimerRef.current = null;
+          }, FIRST_ENTRY_NOTIFICATION_PROMPT_DELAY_MS);
+        })
+        .catch(() => {
+          firstEntryNotificationPromptClaimedRef.current = false;
+        });
+    }
   };
 
   const setTestToday = (testToday?: string) => {
@@ -1309,6 +1339,15 @@ export default function App() {
             setAuthChoiceVisible(true);
           }}
           onDismiss={() => setGuestBrowsePromptVisible(false)}
+        />
+        <FirstEntryNotificationPromptModal
+          visible={firstEntryNotificationPromptVisible}
+          onOpenSettings={() => {
+            setFirstEntryNotificationPromptVisible(false);
+            setMenuOpen(false);
+            setTab("settings");
+          }}
+          onDismiss={() => setFirstEntryNotificationPromptVisible(false)}
         />
         <Modal
           transparent

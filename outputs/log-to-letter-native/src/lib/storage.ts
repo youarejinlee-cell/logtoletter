@@ -8,6 +8,7 @@ export const STORAGE_KEY = "log-to-letter-native-v1";
 const GUEST_STORAGE_KEY = `${STORAGE_KEY}:guest`;
 const GUEST_STORAGE_NOTICE_KEY = `${STORAGE_KEY}:guest-storage-notice-shown`;
 const FIRST_RUN_GUIDE_KEY = `${STORAGE_KEY}:first-run-guide-complete`;
+const FIRST_ENTRY_NOTIFICATION_PROMPT_KEY = `${STORAGE_KEY}:first-entry-notification-prompt-shown`;
 
 export function appStateStorageKey(userId?: string | null) {
   return userId ? `${STORAGE_KEY}:user:${encodeURIComponent(userId)}` : GUEST_STORAGE_KEY;
@@ -155,4 +156,11 @@ export async function hasCompletedFirstRunGuide() {
 
 export async function completeFirstRunGuide() {
   await AsyncStorage.setItem(FIRST_RUN_GUIDE_KEY, "true");
+}
+
+export async function claimFirstEntryNotificationPrompt() {
+  const alreadyShown = await AsyncStorage.getItem(FIRST_ENTRY_NOTIFICATION_PROMPT_KEY);
+  if (alreadyShown === "true") return false;
+  await AsyncStorage.setItem(FIRST_ENTRY_NOTIFICATION_PROMPT_KEY, "true");
+  return true;
 }
