@@ -1,5 +1,8 @@
 # Log Planet Native
 
+> 프로젝트를 다른 계정이나 개발 환경으로 인계할 때는 먼저
+> [`docs/handoff/README.md`](docs/handoff/README.md)를 읽어주세요.
+
 Expo + React Native로 옮기는 첫 네이티브 MVP입니다.
 
 ## 실행
