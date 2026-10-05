@@ -1,0 +1,38 @@
+const {PGlite}=require(process.argv[2]||'@electric-sql/pglite');
+const fs=require('node:fs'),assert=require('node:assert/strict'),path=require('node:path');
+(async()=>{
+ const db=new PGlite();
+ await db.exec(`create role anon;create role authenticated;create role service_role;create schema auth;create table auth.users(id uuid primary key,email text,created_at timestamptz default now());create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;create table public.entries(id uuid primary key,user_id uuid,created_at timestamptz);`);
+ for(const f of ['20261005100000_add_star_rewards.sql','20261005110000_add_log_friend_shop.sql','20261005120000_add_admin_console.sql','20261005150000_notion_ledger_bridge.sql','20261005170000_notion_gift_revoke_order.sql']) await db.exec(fs.readFileSync(path.join(__dirname,'../supabase/migrations',f),'utf8'));
+ const owner='00000000-0000-0000-0000-000000000001',member='00000000-0000-0000-0000-000000000002';
+ await db.query('insert into auth.users(id,email) values($1,$2),($3,$4)',[owner,'you.are.jinlee@gmail.com',member,'notion-test@example.invalid']);
+ await db.query('insert into public.logplanet_admins(user_id) values($1)',[owner]);
+ const id='11111111-1111-4111-8111-111111111111',gift='22222222-2222-4222-8222-222222222222',revoke='33333333-3333-4333-8333-333333333333';
+ const payload={email:'notion-test@example.invalid',kind:'stars',amount:50,reason:'Notion test',reference:null};
+ const apply=(i,p)=>db.query('select public.notion_apply_request($1,$2) result',[i,p]);
+ for(const role of ['anon','authenticated']) {await db.exec(`set role ${role}`);await assert.rejects(apply(id,payload),/permission denied/);await assert.rejects(db.query('select public.notion_member_snapshots()'),/permission denied/);await db.exec('reset role');}
+ await db.exec('set role service_role');
+ const first=(await apply(id,payload)).rows[0].result;
+ assert.deepEqual((await apply(id,payload)).rows[0].result,first);
+ await assert.rejects(apply(id,{...payload,amount:51}),/새 요청/);
+ await assert.rejects(apply(gift,{...payload,email:'missing@example.invalid'}),/이메일/);
+ await assert.rejects(apply(gift,{...payload,amount:-51}),/Not enough/);
+ assert.equal((await db.query('select public.notion_get_receipt($1) r',[gift])).rows[0].r,null);
+ const g=(await apply(gift,{...payload,kind:'gift_days',amount:365})).rows[0].result;
+ assert.ok(Date.parse(g.effective_until)>Date.now()+364*86400000);
+ const later='44444444-4444-4444-8444-444444444444',undoLater='55555555-5555-4555-8555-555555555555';
+ await apply(later,{...payload,kind:'gift_days',amount:30});
+ await assert.rejects(apply(revoke,{...payload,kind:'gift_revoke',amount:0,reference:gift}),/최근 지급/);
+ await apply(undoLater,{...payload,kind:'gift_revoke',amount:0,reference:later});
+ await apply(revoke,{...payload,kind:'gift_revoke',amount:0,reference:gift});
+ let snap=(await db.query('select public.notion_member_snapshots() s')).rows[0].s;
+ assert.equal(snap[0].balance,50);assert.equal(snap[0].gift_until,null);
+ assert.equal((await db.query('select public.notion_sync_lease($1) ok',[id])).rows[0].ok,true);
+ assert.equal((await db.query('select public.notion_sync_lease($1) ok',[gift])).rows[0].ok,false);
+ assert.equal((await db.query('select public.notion_sync_lease($1,true) ok',[gift])).rows[0].ok,false);
+ await db.query('select public.notion_sync_lease($1,true)',[id]);
+ assert.equal((await db.query('select public.notion_sync_lease($1) ok',[gift])).rows[0].ok,true);
+ await db.exec('reset role');
+ const count=(await db.query('select count(*) n from public.star_reward_ledger')).rows[0].n;assert.equal(Number(count),1);
+ await db.close();console.log('PASS: unauthorized roles; idempotent grants; changed payload; missing member; insufficient balance rollback; gift grant/revoke; snapshot; worker lease ownership.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

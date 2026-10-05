@@ -1,0 +1,41 @@
+const {PGlite}=require(process.argv[2]||'@electric-sql/pglite');
+const fs=require('node:fs'),assert=require('node:assert/strict'),path=require('node:path');
+(async()=>{
+ const db=new PGlite();
+ await db.exec(`create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key,email text,created_at timestamptz not null default now());create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;grant usage on schema auth to authenticated;grant execute on function auth.uid() to authenticated;
+ create table public.entries(id uuid primary key,user_id uuid references auth.users(id),created_at timestamptz not null);create table public.notification_settings(user_id uuid primary key,enabled boolean);
+ insert into auth.users(id,email) values('00000000-0000-0000-0000-000000000001','admin@test.invalid'),('00000000-0000-0000-0000-000000000002','member@test.invalid');`);
+ for(const file of ['20261005100000_add_star_rewards.sql','20261005110000_add_log_friend_shop.sql','20261005120000_add_admin_console.sql','20261005130000_star_missions_v2.sql']) await db.exec(fs.readFileSync(path.join(__dirname,'../supabase/migrations',file),'utf8'));
+ await db.exec(`create function public.test_balance(u uuid) returns bigint language sql security definer as $$select coalesce(sum(amount),0) from public.star_reward_ledger where user_id=u$$;`);
+ const admin='00000000-0000-0000-0000-000000000001',member='00000000-0000-0000-0000-000000000002';
+ const balance=async()=>Number((await db.query('select public.test_balance($1) n',[member])).rows[0].n);
+ for(let i=1;i<=109;i++){
+  await db.query('insert into public.entries values($1,$2,now())',[`10000000-0000-0000-0000-${String(i).padStart(12,'0')}`,member]);
+  if([1,4,5,10,20,109].includes(i)) assert.equal(await balance(),1+(i>=5?1:0)+(i>=10?2:0)+(i>=20?3:0)+(i>=109?10:0));
+ }
+ await db.query('delete from public.entries where user_id=$1',[member]);
+ await db.query("insert into public.entries values('10000000-0000-0000-0000-000000000001',$1,now())",[member]);assert.equal(await balance(),17);
+ await db.query("update public.star_mission_progress set first_met_at=now()-interval '109 days' where user_id=$1",[member]);
+ await db.exec(`set role authenticated;set request.jwt.claim.sub='${member}';`);
+ await db.query('select public.refresh_star_missions()');await db.query('select public.refresh_star_missions()');assert.equal(await balance(),30);
+ await assert.rejects(db.query('select public.complete_notification_mission()'),/Save enabled/);
+ await assert.rejects(db.query("select public.admin_find_users('member')"),/Admin access/);
+ await assert.rejects(db.query('select * from public.admin_operations'));
+ await assert.rejects(db.query("insert into public.star_reward_ledger values($1,'admin:forged',100,'bad',now())",[member]));
+ await db.exec('reset role;');await db.query('insert into public.notification_settings values($1,true)',[member]);await db.query('insert into public.logplanet_admins(user_id) values($1)',[admin]);
+ await db.exec(`set role authenticated;`);await db.query('select public.complete_notification_mission()');await db.query('select public.complete_notification_mission()');assert.equal(await balance(),35);
+ await db.query("select public.claim_monthly_analysis_stars('2026-01')");assert.equal(await balance(),35);
+ await db.exec(`set request.jwt.claim.sub='${admin}';`);
+ const apply=async(id,kind,amount,reason='Test operation',reference=null)=>db.query('select public.admin_apply_operation($1,$2,$3,$4,$5,$6)',[id,member,kind,amount,reason,reference]);
+ const op='20000000-0000-0000-0000-000000000001';await apply(op,'stars',50);await apply(op,'stars',50);assert.equal(await balance(),85);
+ await assert.rejects(apply(op,'stars',60),/already used/);
+ await apply('20000000-0000-0000-0000-000000000002','stars',-5);assert.equal(await balance(),80);
+ await assert.rejects(apply('20000000-0000-0000-0000-000000000003','stars',-81),/Not enough/);
+ const gift='20000000-0000-0000-0000-000000000004';await apply(gift,'gift_days',365);await apply(gift,'gift_days',365);
+ await db.exec(`set request.jwt.claim.sub='${member}';`);let end=(await db.query('select public.my_gift_access() as until')).rows[0].until;assert.ok(Date.parse(end)>Date.now()+364*86400000);
+ await db.query("select public.purchase_log_friend('rogi')");assert.equal(await balance(),30);await db.query("select public.purchase_log_friend('rogi')");assert.equal(await balance(),30);
+ await db.exec(`set request.jwt.claim.sub='${admin}';`);await apply('20000000-0000-0000-0000-000000000005','gift_revoke',0,'Test revoke',gift);
+ await db.exec(`set request.jwt.claim.sub='${member}';`);assert.equal((await db.query('select public.my_gift_access() as until')).rows[0].until,null);
+ await db.exec('set role anon;');await assert.rejects(db.query('select public.refresh_star_missions()'));await assert.rejects(db.query('select public.my_gift_access()'));
+ await db.close();console.log('PASS: v2 daily cap; cumulative milestones; deletion/replay; 30/109 days; notification claim/dedup; monthly retired; admin authorization; ledger write protection; credit/debit/retry; gift grant/revoke; purchase/RLS.');
+})().catch(e=>{console.error(e);process.exitCode=1});

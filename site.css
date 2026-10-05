@@ -76,7 +76,7 @@ a {
   align-items: flex-end;
   overflow: hidden;
   background-color: var(--navy);
-  background-image: url("./outputs/log-to-letter-native/assets/assets_v4/app-logo/logo_v1.png");
+  background-image: url("./outputs/log-planet-native/assets/assets_v4/app-logo/logo_v1.png");
   background-position: center;
   background-size: cover;
   color: var(--paper);

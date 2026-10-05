@@ -1,0 +1,210 @@
+import { Alert, Image, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { User } from "@supabase/supabase-js";
+import { AppleLoginButton } from "../components/AppleLoginButton";
+import { GoogleLoginButton, KakaoLoginButton } from "../components/KakaoLoginButton";
+import { Screen } from "../components/Screen";
+import { getUserAvatarUrl, getUserDisplayName } from "../lib/profile";
+import { isSupabaseConfigured } from "../lib/supabase";
+import { useAppTheme } from "../lib/theme";
+
+const defaultProfileImage = require("../../assets/assets_v4/app-logo/logo_v2.png");
+
+type Props = {
+  user: User | null;
+  loading?: boolean;
+  error?: string | null;
+  syncStatus?: string | null;
+  premiumStatus: string;
+  canManageSubscription?: boolean;
+  onAppleLogin: () => void;
+  onGoogleLogin: () => void;
+  onKakaoLogin: () => void;
+  onSync: () => void;
+  onExport: () => void;
+  onDeleteData: () => Promise<void> | void;
+  onDeleteAccount: () => Promise<void> | void;
+  onSignOut: () => void;
+  onOpenPremium: () => void;
+  onManageSubscription: () => void;
+};
+
+export function AccountScreen({
+  user,
+  loading,
+  error,
+  syncStatus,
+  premiumStatus,
+  canManageSubscription = false,
+  onAppleLogin,
+  onGoogleLogin,
+  onKakaoLogin,
+  onSync,
+  onExport,
+  onDeleteData,
+  onDeleteAccount,
+  onSignOut,
+  onOpenPremium,
+  onManageSubscription
+}: Props) {
+  const theme = useAppTheme();
+  const loginProviders = Platform.OS === "ios" ? "Apple, 카카오 또는 Google" : "카카오 또는 Google";
+  const displayName = user ? getUserDisplayName(user) : "Log Planet";
+  const avatarUrl = user ? getUserAvatarUrl(user) : null;
+
+  return (
+    <Screen eyebrow="Account" title="계정" lead="로그인과 데이터 관리를 여기에서 할 수 있어.">
+      <View style={styles.panel}>
+        {user ? (
+          <>
+            <View style={styles.profileHeader}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+              ) : (
+                <Image source={defaultProfileImage} style={styles.avatar} />
+              )}
+              <View style={styles.profileText}>
+                <Text style={styles.name}>{displayName}</Text>
+                <Text style={styles.email}>{user.email || "연결된 계정"}</Text>
+              </View>
+            </View>
+            {syncStatus ? <Text style={styles.status}>서버 동기화: {syncStatus}</Text> : null}
+            <View style={styles.premiumPanel}>
+              <View style={styles.premiumCopy}>
+                <Text style={styles.premiumLabel}>이용 상태</Text>
+                <Text style={styles.premiumStatus}>{premiumStatus}</Text>
+              </View>
+              <Pressable style={styles.premiumButton} onPress={canManageSubscription ? onManageSubscription : onOpenPremium}>
+                <Text style={styles.premiumButtonText}>{canManageSubscription ? "구독 관리" : "자세히"}</Text>
+              </Pressable>
+            </View>
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+            <ActionButton label="지금 동기화" color={theme.tint} onPress={onSync} />
+            <ActionButton
+              label="내 기록 완전 삭제"
+              color="#d92d20"
+              onPress={() => {
+                Alert.alert(
+                  "내 데이터 완전 삭제",
+                  "기록과 알림 설정을 이 기기와 서버에서 삭제할게. 이 작업은 되돌릴 수 없어.",
+                  [
+                    { text: "아니오", style: "cancel" },
+                    { text: "삭제", style: "destructive", onPress: () => void onDeleteData() }
+                  ]
+                );
+              }}
+            />
+            <ActionButton
+              label="내 계정 삭제"
+              color="#d92d20"
+              onPress={() => {
+                Alert.alert(
+                  "내 계정 삭제",
+                  "계정과 서버에 보관된 모든 기록을 삭제할게. 이 작업은 되돌릴 수 없어.",
+                  [
+                    { text: "아니오", style: "cancel" },
+                    { text: "삭제", style: "destructive", onPress: () => void onDeleteAccount() }
+                  ]
+                );
+              }}
+            />
+            <ActionButton label="로그아웃" color={theme.tint} onPress={onSignOut} />
+          </>
+        ) : (
+          <>
+            <Text style={styles.name}>계정 연결</Text>
+            <Text style={styles.description}>
+              {isSupabaseConfigured ? `${loginProviders} 계정으로 연결하면 기록을 서버에 동기화할 수 있어.` : "Supabase 설정을 넣으면 계정 로그인을 쓸 수 있어."}
+            </Text>
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+            <AppleLoginButton loading={loading} onPress={onAppleLogin} />
+            <KakaoLoginButton loading={loading} onPress={onKakaoLogin} />
+            <GoogleLoginButton loading={loading} onPress={onGoogleLogin} />
+          </>
+        )}
+        {!user ? <Text style={styles.status}>{premiumStatus}</Text> : null}
+        <ActionButton label="내 기록 내보내기" color={theme.tint} onPress={onExport} />
+      </View>
+    </Screen>
+  );
+}
+
+function ActionButton({ label, color, onPress }: { label: string; color: string; onPress: () => void }) {
+  return (
+    <Pressable style={styles.actionButton} onPress={onPress}>
+      <Text style={[styles.actionText, { color }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  panel: {
+    gap: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#dfe8da",
+    borderRadius: 8,
+    backgroundColor: "#fff"
+  },
+  profileHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12
+  },
+  avatar: {
+    width: 54,
+    height: 54,
+    borderRadius: 999
+  },
+  profileText: {
+    flex: 1,
+    gap: 4
+  },
+  name: {
+    color: "#18241b",
+    fontSize: 18,
+    fontWeight: "900"
+  },
+  email: {
+    color: "#657064",
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  description: {
+    color: "#657064",
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "700"
+  },
+  status: {
+    color: "#657064",
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  premiumPanel: {
+    minHeight: 64,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: "#eaf5ff"
+  },
+  premiumCopy: { flex: 1, gap: 3 },
+  premiumLabel: { color: "#0b1b4d", fontSize: 14, fontWeight: "900" },
+  premiumStatus: { color: "#52647c", fontSize: 12, lineHeight: 17, fontWeight: "700" },
+  premiumButton: { minHeight: 36, justifyContent: "center", paddingHorizontal: 12, borderRadius: 8, backgroundColor: "#0b1b4d" },
+  premiumButtonText: { color: "#fff", fontSize: 12, fontWeight: "900" },
+  error: {
+    color: "#d92d20",
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  actionButton: {
+    paddingVertical: 10
+  },
+  actionText: {
+    fontSize: 14,
+    fontWeight: "900"
+  },
+});

@@ -7,31 +7,31 @@ outputs/thought-letter-mvp/*secret*.json
 outputs/thought-letter-mvp/supabase-config.local.js
 
 # Native app local files
-outputs/log-to-letter-native/node_modules/
-outputs/log-to-letter-native/.expo/
-outputs/log-to-letter-native/dist/
-outputs/log-to-letter-native/*.log
-outputs/log-to-letter-native/bgm/*.band/
-outputs/log-to-letter-native/supabase/.temp/
-outputs/log-to-letter-native/.env
-outputs/log-to-letter-native/.env.local
-outputs/log-to-letter-native/src/lib/supabaseConfig.ts
-outputs/log-to-letter-native/src/lib/supabaseConfig.local.ts
-outputs/log-to-letter-native/src/lib/*_backup_*.ts
-outputs/log-to-letter-native/android/
-outputs/log-to-letter-native/.idea/
-outputs/log-to-letter-native/screenshot/
-outputs/log-to-letter-native.zip
+outputs/log-planet-native/node_modules/
+outputs/log-planet-native/.expo/
+outputs/log-planet-native/dist/
+outputs/log-planet-native/*.log
+outputs/log-planet-native/bgm/*.band/
+outputs/log-planet-native/supabase/.temp/
+outputs/log-planet-native/.env
+outputs/log-planet-native/.env.local
+outputs/log-planet-native/src/lib/supabaseConfig.ts
+outputs/log-planet-native/src/lib/supabaseConfig.local.ts
+outputs/log-planet-native/src/lib/*_backup_*.ts
+outputs/log-planet-native/android/
+outputs/log-planet-native/.idea/
+outputs/log-planet-native/screenshot/
+outputs/log-planet-native.zip
 
 # Log Planet generated previews and local source backups
-outputs/log-to-letter-native/tmp/
-outputs/log-to-letter-native/assets/_*/
-outputs/log-to-letter-native/assets/*backup*
-outputs/log-to-letter-native/assets/concept_reference.png
-outputs/log-to-letter-native/assets/universe-color-version/
-outputs/log-to-letter-native/assets/universe-continent-water-ripples*.png
-outputs/log-to-letter-native/assets/universe-continent-west.png
-outputs/log-to-letter-native/assets/universe-planet-*.png
-outputs/log-to-letter-native/assets/universe-nature-version/*.before-*
-outputs/log-to-letter-native/assets/universe-nature-version/universe-continent-down-right.png
+outputs/log-planet-native/tmp/
+outputs/log-planet-native/assets/_*/
+outputs/log-planet-native/assets/*backup*
+outputs/log-planet-native/assets/concept_reference.png
+outputs/log-planet-native/assets/universe-color-version/
+outputs/log-planet-native/assets/universe-continent-water-ripples*.png
+outputs/log-planet-native/assets/universe-continent-west.png
+outputs/log-planet-native/assets/universe-planet-*.png
+outputs/log-planet-native/assets/universe-nature-version/*.before-*
+outputs/log-planet-native/assets/universe-nature-version/universe-continent-down-right.png
 outputs/log-to-letter-pre-planet/

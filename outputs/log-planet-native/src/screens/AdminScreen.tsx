@@ -1,0 +1,41 @@
+import { useEffect, useRef, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import * as Crypto from "expo-crypto";
+import { supabase } from "../lib/supabase";
+type Member={id:string;email:string;balance:number;gift_until:string|null};
+type Operation={id:string;kind:string;amount:number;reason:string;actor_id:string;effective_until:string|null;created_at:string;reference_id:string|null};
+type History={operations:Operation[];stars:{reward_key:string;amount:number;reason:string;created_at:string}[]};
+type Draft={id:string;user:Member;kind:string;amount:number;reason:string;reference:string|null};
+async function rpc(name:string,args?:Record<string,unknown>){const {data,error}=await supabase.rpc(name,args);if(error)throw new Error(error.message);return data;}
+export function AdminScreen({userId,email,onLogin}:{userId?:string;email?:string;onLogin:()=>void}){
+ const [allowed,setAllowed]=useState(false),[checked,setChecked]=useState(false),[query,setQuery]=useState("");
+ const [members,setMembers]=useState<Member[]>([]),[selected,setSelected]=useState<Member|null>(null),[history,setHistory]=useState<History|null>(null);
+ const [kind,setKind]=useState("stars"),[amount,setAmount]=useState("50"),[reason,setReason]=useState("");
+ const [draft,setDraft]=useState<Draft|null>(null),[busy,setBusy]=useState(false),[message,setMessage]=useState("");
+ const lock=useRef(false),scope=useRef(userId);scope.current=userId;
+ useEffect(()=>{let live=true;setAllowed(false);setChecked(false);setMembers([]);setSelected(null);setHistory(null);setDraft(null);if(!userId){setChecked(true);return;}rpc("is_logplanet_admin").then(v=>{if(live)setAllowed(v===true)}).catch(e=>{if(live)setMessage(e.message)}).finally(()=>{if(live)setChecked(true)});return()=>{live=false}},[userId]);
+ const task=async(fn:()=>Promise<void>)=>{if(lock.current)return;lock.current=true;setBusy(true);setMessage("");try{await fn()}catch(e){setMessage(e instanceof Error?e.message:"처리하지 못했습니다. 다시 확인해 주세요.")}finally{lock.current=false;setBusy(false)}};
+ const loadMember=async(m:Member)=>{const id=scope.current;const data=await rpc("admin_user_history",{p_user:m.id});if(id!==scope.current)return;setSelected(m);setHistory(data);setDraft(null)};
+ const prepare=()=>{const n=Number(amount);if(!selected||!Number.isSafeInteger(n)||!n||reason.trim().length<3||reason.length>500||(kind==="stars"?Math.abs(n)>100000:n<1||n>1095)){setMessage("대상, 수량/기간, 3~500자의 사유를 확인해 주세요.");return;}setDraft({id:Crypto.randomUUID(),user:selected,kind,amount:n,reason:reason.trim(),reference:null});setMessage("")};
+ const submit=()=>task(async()=>{if(!draft)return;const job=draft,owner=scope.current;await rpc("admin_apply_operation",{p_id:job.id,p_user:job.user.id,p_kind:job.kind,p_amount:job.amount,p_reason:job.reason,p_reference:job.reference});if(owner!==scope.current)return;const updated:Member[]=await rpc("admin_find_users",{p_query:job.user.id});await loadMember(updated.find(m=>m.id===job.user.id)||job.user);setDraft(null);setMessage("처리 완료. 서버 장부와 앱에 반영되었습니다.")});
+ const button=(label:string,onPress:()=>void,disabled=false)=><Pressable accessibilityRole="button" disabled={disabled||busy} onPress={onPress} style={[s.button,(disabled||busy)&&s.disabled]}><Text style={s.buttonText}>{label}</Text></Pressable>;
+ return <ScrollView contentContainerStyle={s.page}>
+  <Text style={s.title}>Log Planet 운영 관리</Text><Text style={s.text}>{email||"관리자 로그인 필요"}</Text>
+  {!userId?button("관리자 계정으로 로그인",onLogin):!checked?<Text style={s.text}>권한 확인 중…</Text>:!allowed?<View style={s.card}><Text style={s.heading}>관리자 전용 화면</Text><Text style={s.text}>이 계정에는 관리자 권한이 없습니다. 일반 사용자의 장부는 조회하거나 변경할 수 없습니다.</Text></View>:<>
+   <View style={s.card}><Text style={s.heading}>회원 찾기</Text><TextInput accessibilityLabel="회원 이메일 또는 ID" value={query} onChangeText={setQuery} editable={!busy&&!draft} placeholder="이메일 또는 회원 ID (3자 이상)" placeholderTextColor="#8292af" autoCapitalize="none" style={s.input}/>{button("회원 검색",()=>task(async()=>{const owner=scope.current;const rows=await rpc("admin_find_users",{p_query:query});if(owner!==scope.current)return;setMembers(rows);setSelected(null);setHistory(null);setDraft(null);if(!rows.length)setMessage("검색 결과가 없습니다.")}),query.trim().length<3||!!draft)}
+   {members.map(m=><Pressable accessibilityRole="button" key={m.id} disabled={busy||!!draft} onPress={()=>task(()=>loadMember(m))} style={s.row}><Text style={s.heading}>{m.email}</Text><Text style={s.text}>★ {m.balance} · 이벤트 이용권 {m.gift_until?new Date(m.gift_until).toLocaleString("ko-KR"):"없음"}</Text></Pressable>)}</View>
+   {selected&&<View style={s.card}><Text style={s.heading}>{selected.email}</Text><Text selectable style={s.text}>{selected.id}</Text><Text style={s.text}>현재 별 {selected.balance}개 · 이벤트 이용권 종료 {selected.gift_until?new Date(selected.gift_until).toLocaleString("ko-KR"):"없음"}</Text>
+    <View style={s.buttons}>{button("별 지급·회수",()=>{setKind("stars");setAmount("50")},!!draft)}{button("이벤트 이용권",()=>{setKind("gift_days");setAmount("365")},!!draft)}</View>
+    <Text style={s.text}>{kind==="stars"?"양수는 지급, 음수는 회수. 잔액보다 많이 회수할 수 없습니다.":"지급할 일수 (1~1095일). 남은 이벤트 기간 뒤에 더해지며 자동 결제되지 않습니다. 스토어 유료 구독의 결제·갱신 상태는 바꾸지 않습니다."}</Text>
+    <TextInput accessibilityLabel={kind==="stars"?"별 수량":"이용권 일수"} value={amount} onChangeText={setAmount} editable={!busy&&!draft} style={s.input}/>
+    <TextInput accessibilityLabel="지급 또는 회수 사유" value={reason} onChangeText={setReason} editable={!busy&&!draft} style={s.input} placeholder="이벤트명과 사유 (필수)" placeholderTextColor="#8292af" maxLength={500}/>
+    {button("변경 내용 확인",prepare,!!draft)}
+   </View>}
+   {draft&&<View style={s.confirm}><Text style={s.heading}>최종 확인</Text><Text style={s.text}>대상: {draft.user.email}{'\n'}{draft.kind==="stars"?`별 ${draft.amount>0?"+":""}${draft.amount}개`:draft.kind==="gift_days"?`이벤트 이용권 ${draft.amount}일 지급`:`이용권 지급건 ${draft.reference} 종료`}{'\n'}사유: {draft.reason}</Text><Text style={s.text}>처리자와 시각이 장부에 남습니다. 통신 실패 시 다시 눌러도 같은 요청은 한 번만 처리됩니다.</Text><View style={s.buttons}>{button("확정하여 반영",submit)}{button("취소",()=>setDraft(null))}</View></View>}
+   {history&&<View style={s.card}><Text style={s.heading}>관리자 처리 장부 · 최근 100건</Text>{!history.operations.length&&<Text style={s.text}>아직 처리 이력이 없습니다.</Text>}{history.operations.map(o=><View style={s.row} key={o.id}><Text style={s.heading}>{o.kind==="stars"?`별 ${o.amount}`:o.kind==="gift_days"?`이용권 ${o.amount}일` :"이용권 종료"} · {o.reason}</Text><Text selectable style={s.text}>{new Date(o.created_at).toLocaleString("ko-KR")} · 처리자 {o.actor_id}{'\n'}{o.id}{o.effective_until?`\n종료: ${new Date(o.effective_until).toLocaleString("ko-KR")}`:""}</Text>{o.kind==="gift_days"&&!history.operations.some(r=>r.reference_id===o.id)&&button("이 지급건 종료",()=>{if(reason.trim().length<3){setMessage("위 사유 입력란에 종료 사유를 먼저 입력해 주세요.");return;}setDraft({id:Crypto.randomUUID(),user:selected!,kind:"gift_revoke",amount:0,reason:reason.trim(),reference:o.id})},!!draft)}</View>)}</View>}
+   {history&&<View style={s.card}><Text style={s.heading}>별 적립·사용 장부 · 최근 200건</Text>{history.stars.map(t=><View key={t.reward_key} style={s.row}><Text style={s.heading}>{t.amount>0?"+":""}{t.amount} ★ · {t.reason}</Text><Text style={s.text}>{new Date(t.created_at).toLocaleString("ko-KR")}</Text></View>)}</View>}
+  </>}
+  {(!!message||busy)&&<Text accessibilityLiveRegion="polite" style={s.status}>{busy?"처리 중…":message}</Text>}
+ </ScrollView>;
+}
+const s=StyleSheet.create({page:{padding:24,gap:18,maxWidth:1000,width:"100%",alignSelf:"center"},title:{fontSize:26,fontWeight:"800",color:"#fff"},heading:{fontSize:16,fontWeight:"700",color:"#fff"},text:{fontSize:13,lineHeight:21,color:"#bdcbe0"},card:{padding:20,gap:12,borderRadius:16,backgroundColor:"#172646"},confirm:{padding:20,gap:14,borderWidth:1,borderColor:"#f0c675",backgroundColor:"#293650",borderRadius:16},input:{padding:13,borderWidth:1,borderColor:"#63708d",borderRadius:8,color:"#fff",fontSize:15},button:{padding:13,backgroundColor:"#385674",borderRadius:9,alignItems:"center"},buttonText:{color:"#fff",fontWeight:"700"},buttons:{flexDirection:"row",gap:10,flexWrap:"wrap"},disabled:{opacity:.45},row:{paddingVertical:12,gap:5,borderBottomWidth:1,borderColor:"#34415d"},status:{color:"#ffe09a",fontSize:15,lineHeight:23,padding:12}});
